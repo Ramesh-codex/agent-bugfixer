@@ -1,10 +1,13 @@
 """Environment and pricing configuration for the agent."""
 
 import json
+import logging
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -20,7 +23,29 @@ def repo_relative(path: Path) -> str:
     except ValueError:
         return str(path)
 
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+def clean_api_key(raw: str | None) -> str | None:
+    """The key with surrounding whitespace stripped (None if nothing is left).
+
+    A secret pasted with a trailing newline is an illegal HTTP header value;
+    the SDK reports that only as "Connection error." (FINDINGS.md F11). Any
+    whitespace is warned about -- never the key itself."""
+    if raw is None:
+        return None
+    key = raw.strip()
+    if key != raw:
+        logger.warning(
+            "ANTHROPIC_API_KEY had leading/trailing whitespace (e.g. a trailing newline in a pasted "
+            "secret); it was stripped. Fix the stored secret."
+        )
+    if any(c.isspace() for c in key):
+        logger.warning(
+            "ANTHROPIC_API_KEY contains a space or newline inside it; API calls will fail with "
+            "'Connection error.' Re-enter the key."
+        )
+    return key or None
+
+
+ANTHROPIC_API_KEY = clean_api_key(os.environ.get("ANTHROPIC_API_KEY"))
 AGENT_MODEL = os.environ.get("AGENT_MODEL", "claude-haiku-5-5")
 
 MAX_TOOL_CALLS = 25

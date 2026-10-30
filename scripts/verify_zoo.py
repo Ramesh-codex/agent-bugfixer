@@ -10,6 +10,7 @@ reports/verify_zoo.json.
 """
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -72,19 +73,33 @@ def to_mount_path(host_path: Path) -> str:
     return f"//{drive.lower()}{rest}"
 
 
-def run_suite(workdir: Path) -> tuple[int | None, str, float, str]:
-    mount = to_mount_path(workdir)
-    cmd = [
+def container_user_args() -> list[str]:
+    """Same as agent/sandbox.py (kept standalone: this script needs no
+    requirements). On Linux/macOS the container runs as the host user, so
+    nothing it writes into the mount is root-owned (FINDINGS.md F12)."""
+    if sys.platform == "win32":
+        return []
+    return ["--user", f"{os.getuid()}:{os.getgid()}"]
+
+
+def suite_command(workdir: Path) -> list[str]:
+    return [
         "docker", "run", "--rm",
         "--network", "none",
         "--memory", MEMORY_LIMIT,
         "--cpus", CPU_LIMIT,
-        "-v", f"{mount}:/workspace",
+        *container_user_args(),
+        "-e", "PYTHONDONTWRITEBYTECODE=1",
+        "-v", f"{to_mount_path(workdir)}:/workspace",
         "-w", "/workspace",
         IMAGE,
         "timeout", str(CONTAINER_TIMEOUT_S),
-        "python", "-m", "pytest", "-q", "--tb=short",
+        "python", "-m", "pytest", "-q", "--tb=short", "-p", "no:cacheprovider",
     ]
+
+
+def run_suite(workdir: Path) -> tuple[int | None, str, float, str]:
+    cmd = suite_command(workdir)
     start = time.monotonic()
     try:
         proc = subprocess.run(

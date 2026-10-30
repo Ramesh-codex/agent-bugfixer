@@ -38,3 +38,13 @@ jobs:
         run: docker build -t bugzoo-sandbox -f sandbox/Dockerfile sandbox
       - name: Verify every bug fails and the base passes
         run: python scripts/verify_zoo.py
+      # FINDINGS.md F12: a container running as root leaves root-owned files
+      # in the bind mount, which later rmtree calls cannot delete.
+      - name: No root-owned files left in the workspace
+        run: |
+          leftovers=$(find . -path ./.git -prune -o -uid 0 -print)
+          if [ -n "$leftovers" ]; then
+            echo "::error::root-owned files after verify_zoo:"
+            echo "$leftovers"
+            exit 1
+          fi

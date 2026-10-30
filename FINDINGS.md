@@ -441,3 +441,75 @@ least one revision round before escalating, or require the Reviewer to show
 why the failing test cannot be satisfied by any library change. Either
 change needs its own `--repeats` run to measure, because, as this finding
 shows, a single live run can be misleading.
+
+## F11 — A secret with a trailing newline shows up as `APIConnectionError: Connection error.`
+
+**Finding:** The first live run on GitHub Actions (M6) failed with
+"Connection error". The cause was not the network: the `ANTHROPIC_API_KEY`
+repository secret ended in a newline. A newline is not a legal HTTP header
+value, so the request is rejected on the client before anything is sent.
+The Anthropic SDK reports this as a connection failure, which points the
+investigation in the wrong direction.
+
+**Evidence:**
+- The live run's log, as reported: the run failed with "Connection error";
+  the GitHub secret ended in a newline.
+- Offline reproduction, with no API call (the client pointed at a local
+  socket, `max_retries=0`, key `"sk-test-not-a-key\n"`): `models.list()`
+  raised `anthropic.APIConnectionError` with message `'Connection error.'`,
+  and `__cause__` was `LocalProtocolError: Illegal header value b'Bearer sk-test-not-a-key\n'`.
+- That cause message **contains the key**. A traceback printed with the
+  cause chain would show the key in the log. GitHub's secret masking may not
+  catch it, because the logged value differs from the stored secret.
+- Fix: `agent/config.py:26-48` (`clean_api_key`). It strips surrounding
+  whitespace and warns without printing the key. It also warns if whitespace
+  is still inside the key. `agent/gh_issue.py:341` catches `anthropic.APIError`
+  around the model check and prints only the exception type and message, with
+  no traceback.
+- Tests: `tests/test_config_api_key.py` (stripping, warnings, key never in
+  the log), and `tests/test_gh_issue.py::test_main_reports_api_errors_without_traceback_or_key`.
+
+**Impact:** One wasted live run and a misleading diagnosis. With the fix, a
+trailing newline in a pasted secret no longer breaks a run, and the log says
+the secret should be fixed. The traceback leak was a latent risk in any
+code path that lets an `APIConnectionError` go uncaught. The agent loops
+already catch `anthropic.APIError` and log only `str(exc)` ("Connection
+error."), so `gh_issue`'s startup model check was the exposed path.
+
+## F12 — Root-owned files in the bind-mounted workspace on Linux
+
+**Finding:** The sandbox container ran pytest as root. On a Linux host, every
+file it wrote into the bind-mounted workspace (`__pycache__/*.pyc`,
+`.pytest_cache/`) was owned by root on the host. The non-root process that
+created the workspace then could not delete those files. Docker Desktop on
+Windows maps ownership to the host user, so every local run, including the
+M6 dry run, hid this. F1's cache-file filter also hid it, because it made
+those files invisible to scoring rather than preventing them.
+
+**Evidence:**
+- The live run's log on GitHub Actions (Linux), as reported:
+  `gh_issue.final_suite` → `shutil.rmtree(workspace / "tests")` →
+  `PermissionError` on `tests/__pycache__`.
+- Fix, applied to every sandbox call (`agent/sandbox.py`, used by the agent
+  tools, scoring and `gh_issue`; plus `scripts/verify_zoo.py`, which stays
+  standalone):
+  - `agent/sandbox.py:33` (`container_user_args`): `--user <uid>:<gid>` of
+    the host user on non-Windows hosts.
+  - `agent/sandbox.py:45-46`: `-e PYTHONDONTWRITEBYTECODE=1` and pytest
+    `-p no:cacheprovider`, so no cache files are written at all.
+  - `scripts/verify_zoo.py:76-98`: the same command.
+- Local checks (Windows host, Docker Desktop):
+  - `python scripts/verify_zoo.py`: all 16 checks OK, and no `__pycache__`,
+    `.pytest_cache` or `.pyc` left in its workdirs.
+  - The sandbox command with `--user 1001:118` added: `29 passed`, no cache
+    files. So the image runs pytest fine as a uid with no passwd entry.
+- Tests: `tests/test_sandbox.py:40-91` cover `--user` on POSIX and not on
+  Windows, the env and pytest flags on both, `run_pytest` using the built
+  command, and verify_zoo's command matching `agent/sandbox.py`.
+- CI: `.github/workflows/ci.yml` now fails the verify-zoo job if any file
+  under the checkout is owned by uid 0 after `verify_zoo.py`.
+
+**Impact:** Live mode could not finish a run on Linux. Every Linux user of
+`agent.run` would also have had undeletable files under
+`reports/tmp/agent_workspaces/`. Not yet verified on a Linux host: the
+`--user` path runs for the first time in CI or the next live run.

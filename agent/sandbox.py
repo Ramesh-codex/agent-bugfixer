@@ -1,5 +1,6 @@
 """Shared helper for invoking pytest inside the bugzoo-sandbox container."""
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -29,25 +30,47 @@ def warm_up() -> None:
     )
 
 
-def run_pytest(workspace: Path, test_target: str | None = None) -> tuple[int | None, str]:
-    """Run pytest against `workspace` inside the sandbox.
+def container_user_args() -> list[str]:
+    """`--user <uid>:<gid>` of the host user on Linux/macOS, so anything the
+    container writes into the bind-mounted workspace is owned by that user,
+    not root (FINDINGS.md F12). Docker Desktop on Windows maps ownership
+    itself and the host has no uid, so nothing there."""
+    if sys.platform == "win32":
+        return []
+    return ["--user", f"{os.getuid()}:{os.getgid()}"]
 
-    Returns (returncode, combined_output). returncode is None on a timeout.
-    """
-    mount = to_mount_path(workspace)
+
+# No bytecode, no .pytest_cache: the container should leave nothing behind in
+# the workspace except what the code under test itself writes.
+NO_CACHE_ENV = ["-e", "PYTHONDONTWRITEBYTECODE=1"]
+PYTEST_ARGS = ["python", "-m", "pytest", "-q", "--tb=short", "-p", "no:cacheprovider"]
+
+
+def pytest_command(workspace: Path, test_target: str | None = None) -> list[str]:
     cmd = [
         "docker", "run", "--rm",
         "--network", "none",
         "--memory", config.SANDBOX_MEMORY,
         "--cpus", config.SANDBOX_CPUS,
-        "-v", f"{mount}:/workspace",
+        *container_user_args(),
+        *NO_CACHE_ENV,
+        "-v", f"{to_mount_path(workspace)}:/workspace",
         "-w", "/workspace",
         config.SANDBOX_IMAGE,
         "timeout", str(config.CONTAINER_TEST_TIMEOUT_S),
-        "python", "-m", "pytest", "-q", "--tb=short",
+        *PYTEST_ARGS,
     ]
     if test_target:
         cmd.append(test_target)
+    return cmd
+
+
+def run_pytest(workspace: Path, test_target: str | None = None) -> tuple[int | None, str]:
+    """Run pytest against `workspace` inside the sandbox.
+
+    Returns (returncode, combined_output). returncode is None on a timeout.
+    """
+    cmd = pytest_command(workspace, test_target)
 
     try:
         proc = subprocess.run(

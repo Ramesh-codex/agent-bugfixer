@@ -39,6 +39,8 @@ import sys
 import time
 from pathlib import Path
 
+import anthropic
+
 from agent import config, gh_live, sandbox
 from agent.graph import MultiLimits, MultiResult, run_multi_agent
 from agent.logging_utils import TrajectoryLogger
@@ -305,8 +307,6 @@ def run_issue(
 
 def verify_model(model: str) -> bool:
     """CLAUDE.md rule 4: the model id must be one the API lists right now."""
-    import anthropic
-
     client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
     return any(m.id == model for m in client.models.list())
 
@@ -336,7 +336,14 @@ def main(argv: list[str] | None = None) -> int:
         print("ANTHROPIC_API_KEY is not set. Aborting.", file=sys.stderr)
         return 1
     model = config.AGENT_MODEL
-    if not verify_model(model):
+    try:
+        listed = verify_model(model)
+    except anthropic.APIError as exc:
+        # No traceback: the cause chain of a connection error can quote the
+        # request's auth header, i.e. the key (FINDINGS.md F11).
+        print(f"Model check failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    if not listed:
         print(f"Model {model!r} is not in client.models.list(); refusing to run.", file=sys.stderr)
         return 1
 

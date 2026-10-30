@@ -219,3 +219,25 @@ def test_main_rejects_bad_run_id_before_any_api_call(tmp_path, repo):
     path = tmp_path / "issue.json"
     path.write_text(json.dumps(ISSUE), encoding="utf-8")
     assert gh_issue.main(["--repo-path", str(repo), "--issue-file", str(path), "--run-id", "1;x"]) == 1
+
+
+def test_main_reports_api_errors_without_traceback_or_key(tmp_path, repo, monkeypatch, capsys):
+    import anthropic
+    import httpx
+
+    key = "sk-ant-test-secret"
+    monkeypatch.setattr(gh_issue.config, "ANTHROPIC_API_KEY", key)
+
+    def fail(model):
+        try:
+            raise ValueError(f"Illegal header value b'Bearer {key}\n'")
+        except ValueError as cause:
+            raise anthropic.APIConnectionError(request=httpx.Request("GET", "http://x")) from cause
+
+    monkeypatch.setattr(gh_issue, "verify_model", fail)
+    path = tmp_path / "issue.json"
+    path.write_text(json.dumps(ISSUE), encoding="utf-8")
+    assert gh_issue.main(["--repo-path", str(repo), "--issue-file", str(path)]) == 1
+    err = capsys.readouterr().err
+    assert "APIConnectionError: Connection error." in err
+    assert key not in err and "Traceback" not in err
