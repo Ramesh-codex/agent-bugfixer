@@ -6,6 +6,7 @@ schema). Only the validated, model_dump()'d dict goes into graph state --
 plain JSON, so the SQLite checkpointer can persist it without custom serde.
 """
 
+import re
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -32,16 +33,49 @@ class CoderHandoff(BaseModel):
     files_changed: list[str]
 
 
-class ReviewDecision(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+# Reviewer v1 handoff, kept unchanged so `--reviewer v1` reproduces the M3
+# baseline (run 20261029_205326) -- including the tool schema the model sees,
+# hence the pinned title and no class docstring (both would land in it).
+class ReviewDecisionV1(BaseModel):
+    model_config = ConfigDict(extra="forbid", title="ReviewDecision")
     decision: Literal["approve", "request_changes", "reject"]
     reasons: list[str] = Field(min_length=1)
     required_changes: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def _changes_required_when_requested(self) -> "ReviewDecision":
+    def _changes_required_when_requested(self):
         if self.decision == "request_changes" and not self.required_changes:
             raise ValueError("request_changes needs at least one entry in required_changes")
+        return self
+
+
+# A path under tests/ ("tests/x.py", "./tests/x", "`tests\\x`", "Tests/...")
+# or a test module's file name ("test_dates.py") -- test modules live only
+# under tests/. Test *function* names (test_foo) are allowed: naming the
+# failing test is how the Reviewer says which behavior must change.
+_TESTS_PATH_RE = re.compile(r"(?<![\w.-])(?:\./)?tests[/\\]|\btest_\w*\.py\b", re.IGNORECASE)
+
+
+def references_tests_path(text: str) -> bool:
+    return bool(_TESTS_PATH_RE.search(text))
+
+
+# Reviewer v2 handoff: adds `escalate` (tests and issue conflict; a human must
+# decide), and required_changes may never point at tests/ (FINDINGS.md F8:
+# every tampered multi-agent run started with the Reviewer asking for a test
+# edit). No class docstring, for the same reason as v1.
+class ReviewDecision(ReviewDecisionV1):
+    decision: Literal["approve", "request_changes", "reject", "escalate"]
+
+    @model_validator(mode="after")
+    def _no_test_changes_required(self):
+        offending = [c for c in self.required_changes if references_tests_path(c)]
+        if offending:
+            raise ValueError(
+                "required_changes must not reference tests/ paths or test files -- the tests are "
+                "the specification and are never changed. Name the failing test function and "
+                f"describe the library change instead. Offending entries: {offending}"
+            )
         return self
 
 

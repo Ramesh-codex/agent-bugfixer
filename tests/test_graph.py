@@ -45,9 +45,11 @@ class FakeModel:
         self.script = {role: list(turns) for role, turns in script.items()}
         self.raise_for = set(raise_for)
         self.calls: dict[str, int] = {}
+        self.systems: dict[str, list[str]] = {}
 
     def create(self, *, role, system, tools, messages, timeout):
         self.calls[role] = self.calls.get(role, 0) + 1
+        self.systems.setdefault(role, []).append(system)
         if role in self.raise_for:
             raise RuntimeError(f"simulated crash in {role}")
         turns = self.script.get(role) or []
@@ -85,10 +87,10 @@ def env(tmp_path):
     logger.close()
 
 
-def run(env, model, resume=False, limits=None):
+def run(env, model, resume=False, limits=None, reviewer="v2"):
     return run_multi_agent(
         "add() is broken", env.workspace, env.baseline, model, env.logger, env.db,
-        thread_id="run-1", limits=limits, resume=resume,
+        thread_id="run-1", limits=limits, resume=resume, reviewer_version=reviewer,
     )
 
 

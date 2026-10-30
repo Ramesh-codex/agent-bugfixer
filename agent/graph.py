@@ -1,6 +1,6 @@
 """Milestone 3: Researcher -> Coder -> Reviewer as a LangGraph StateGraph.
 
-    START -> researcher -> coder -> reviewer --approve/reject--> END
+    START -> researcher -> coder -> reviewer --approve/reject/escalate--> END
                              ^          |
                              +----------+ request_changes (max 3 revisions)
 
@@ -26,7 +26,14 @@ from langgraph.graph import END, START, StateGraph
 
 from agent import config
 from agent.logging_utils import TrajectoryLogger
-from agent.roles import ModelClient, RoleOutcome, SharedBudget, run_role, wrap_untrusted_issue
+from agent.roles import (
+    DEFAULT_REVIEWER,
+    ModelClient,
+    RoleOutcome,
+    SharedBudget,
+    run_role,
+    wrap_untrusted_issue,
+)
 
 AGENTS = ("researcher", "coder", "reviewer")
 
@@ -45,6 +52,10 @@ class GraphState(TypedDict, total=False):
     injection_flag: bool
     stop_reason: str | None
     stop_agent: str | None
+    # v1 | v2 (agent/roles.py REVIEWERS). Read from state, not the caller, so a
+    # resumed thread keeps the version it started with. Absent in M3-era
+    # checkpoints, which were all v1.
+    reviewer_version: str
 
 
 @dataclass
@@ -67,11 +78,12 @@ def _empty_usage() -> dict[str, dict]:
     }
 
 
-def initial_state(run_id: str, issue_text: str) -> GraphState:
+def initial_state(run_id: str, issue_text: str, reviewer_version: str = DEFAULT_REVIEWER) -> GraphState:
     return GraphState(
         run_id=run_id, issue_text=issue_text, started_at=time.time(), research_report=None,
         coder_handoffs=[], edit_history=[], test_results=[], review_decisions=[], revision_count=0,
         usage=_empty_usage(), injection_flag=False, stop_reason=None, stop_agent=None,
+        reviewer_version=reviewer_version,
     )
 
 
@@ -159,6 +171,7 @@ def build_graph(
         outcome = run_role(
             agent, prompt, client=client, workspace=workspace, baseline=baseline, logger=logger,
             budget=budget, tool_calls_remaining=remaining_calls,
+            reviewer_version=state.get("reviewer_version", "v1"),
         )
         logger.log(
             {"event": "node_end", "agent": agent, "stop_reason": outcome.stop_reason,
@@ -193,6 +206,8 @@ def build_graph(
             update["stop_reason"] = "approved"
         elif decision["decision"] == "reject":
             update["stop_reason"] = "rejected"
+        elif decision["decision"] == "escalate":
+            update["stop_reason"] = "escalated"
         elif state["revision_count"] >= limits.max_revisions:
             update["stop_reason"] = "max_revisions"
         else:
@@ -221,6 +236,7 @@ def build_graph(
 class MultiResult:
     stop_reason: str
     stop_agent: str | None
+    reviewer_version: str
     revisions: int
     reviewer_decision: str | None
     review_decisions: list[dict]
@@ -243,6 +259,7 @@ def run_multi_agent(
     thread_id: str,
     limits: MultiLimits | None = None,
     resume: bool = False,
+    reviewer_version: str = DEFAULT_REVIEWER,
 ) -> MultiResult:
     """Run (or, with resume=True, continue) one attempt's graph to completion."""
     limits = limits or MultiLimits()
@@ -252,9 +269,11 @@ def run_multi_agent(
         graph = build_graph(client, workspace, baseline, logger, limits).compile(checkpointer=SqliteSaver(conn))
         cfg = {"configurable": {"thread_id": thread_id}}
         start = time.monotonic()
+        if resume:
+            reviewer_version = graph.get_state(cfg).values.get("reviewer_version", "v1")
         logger.log({"event": "graph_resume" if resume else "graph_start", "thread_id": thread_id,
-                    "checkpoint_db": str(checkpoint_path)})
-        graph.invoke(None if resume else initial_state(thread_id, issue_text), cfg)
+                    "checkpoint_db": str(checkpoint_path), "reviewer_version": reviewer_version})
+        graph.invoke(None if resume else initial_state(thread_id, issue_text, reviewer_version), cfg)
         wall = time.monotonic() - start
         state = graph.get_state(cfg).values
     finally:
@@ -268,6 +287,7 @@ def run_multi_agent(
     result = MultiResult(
         stop_reason=state.get("stop_reason") or "unknown",
         stop_agent=state.get("stop_agent"),
+        reviewer_version=state.get("reviewer_version", "v1"),
         revisions=state["revision_count"],
         reviewer_decision=decisions[-1]["decision"] if decisions else None,
         review_decisions=decisions,
@@ -280,7 +300,7 @@ def run_multi_agent(
         injection_flag=state["injection_flag"],
     )
     logger.log(
-        {"event": "run_end", "mode": "multi", "stop_reason": result.stop_reason, "stop_agent": result.stop_agent,
+        {"event": "run_end", "mode": "multi", "reviewer_version": result.reviewer_version, "stop_reason": result.stop_reason, "stop_agent": result.stop_agent,
          "revisions": result.revisions, "reviewer_decision": result.reviewer_decision,
          "per_agent": usage, "tool_calls": result.tool_calls, "input_tokens": tokens_in,
          "output_tokens": tokens_out, "estimated_cost_usd": result.estimated_cost_usd,

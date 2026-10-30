@@ -2,6 +2,7 @@
 
     python -m agent.run --bug BUG-001                 # single agent (M2 loop)
     python -m agent.run --mode multi --bug BUG-001    # Researcher -> Coder -> Reviewer (M3)
+    python -m agent.run --mode multi --reviewer v1 --bug BUG-001   # M3 baseline Reviewer
     python -m agent.run --all --repeats 3
 """
 
@@ -15,7 +16,7 @@ from agent import aggregate, config, sandbox, scoring
 from agent.graph import run_multi_agent
 from agent.loop import LoopLimits, run_agent_loop
 from agent.logging_utils import TrajectoryLogger
-from agent.roles import AnthropicModelClient
+from agent.roles import DEFAULT_REVIEWER, REVIEWERS, AnthropicModelClient
 from agent.workspace import materialize_workspace
 
 BUGS_DIR = config.ROOT / "bugzoo" / "bugs"
@@ -39,6 +40,7 @@ def run_one_bug(
     model: str,
     repeat_index: int | None = None,
     mode: str = "single",
+    reviewer: str = DEFAULT_REVIEWER,
 ) -> dict:
     bug_dir = BUGS_DIR / bug_id
     meta = _load_meta(bug_dir)
@@ -49,7 +51,9 @@ def run_one_bug(
 
     stem = bug_id if repeat_index is None else f"{bug_id}_rep{repeat_index}"
     if mode == "multi":
-        return _run_one_bug_multi(bug_id, meta, issue_text, workspace, run_dir, workspaces_root, model, stem)
+        return _run_one_bug_multi(
+            bug_id, meta, issue_text, workspace, run_dir, workspaces_root, model, stem, reviewer
+        )
 
     logger = TrajectoryLogger(run_dir / f"{stem}.jsonl")
     try:
@@ -76,7 +80,7 @@ def run_one_bug(
 
 def _run_one_bug_multi(
     bug_id: str, meta: dict, issue_text: str, workspace: Path, run_dir: Path,
-    workspaces_root: Path, model: str, stem: str,
+    workspaces_root: Path, model: str, stem: str, reviewer: str,
 ) -> dict:
     # Pristine snapshot of the starting workspace (base + broken files) for
     # the Reviewer's get_diff -- outside the workspace, so no agent can edit it.
@@ -84,11 +88,12 @@ def _run_one_bug_multi(
     materialize_workspace(baseline, BUGS_DIR / bug_id / "files")
 
     thread_id = f"{run_dir.name}/{stem}"
-    logger = TrajectoryLogger(run_dir / f"{stem}_multi.jsonl")
+    logger = TrajectoryLogger(run_dir / f"{stem}_multi_{reviewer}.jsonl")
     try:
         result = run_multi_agent(
             issue_text, workspace, baseline, AnthropicModelClient(model), logger,
             checkpoint_path=run_dir / "checkpoints.sqlite", thread_id=thread_id,
+            reviewer_version=reviewer,
         )
     finally:
         logger.close()
@@ -99,6 +104,7 @@ def _run_one_bug_multi(
     return {
         "id": bug_id,
         "mode": "multi",
+        "reviewer_version": result.reviewer_version,
         "category": meta.get("category"),
         "fixed": score["fixed"],
         "stop_reason": result.stop_reason,
@@ -203,9 +209,18 @@ def print_review_decisions(rows: list[dict]) -> None:
                 print(f"     required: {change}")
 
 
+def report_filename(kind: str, mode: str, reviewer: str | None, model: str, run_id: str,
+                    repeats: int | None = None) -> str:
+    """e.g. baseline_single_<model>_<id>.json, repeats_multi_v2_<model>_3x_<id>.json."""
+    tag = mode if mode == "single" else f"{mode}_{reviewer}"
+    count = f"_{repeats}x" if repeats is not None else ""
+    return f"{kind}_{tag}_{model}{count}_{run_id}.json"
+
+
 def run_bugs_with_repeats(
     bug_ids: list[str], run_dir: Path, workspaces_root: Path, model: str, repeats: int,
     mode: str = "single",
+    reviewer: str = DEFAULT_REVIEWER,
 ) -> tuple[list[dict], list[dict]]:
     """Run every bug in `bug_ids` `repeats` times. Returns (per_bug_summaries, all_attempts)."""
     per_bug = []
@@ -214,7 +229,8 @@ def run_bugs_with_repeats(
         attempts = []
         for rep in range(1, repeats + 1):
             print(f"Running {bug_id} (repeat {rep}/{repeats})...")
-            row = run_one_bug(bug_id, run_dir, workspaces_root, model, repeat_index=rep, mode=mode)
+            row = run_one_bug(bug_id, run_dir, workspaces_root, model, repeat_index=rep, mode=mode,
+                              reviewer=reviewer)
             attempts.append(row)
         summary = aggregate.aggregate_bug_repeats(bug_id, attempts[0].get("category"), attempts)
         if mode == "multi":
@@ -234,6 +250,10 @@ def main() -> int:
         help="single: the M2 tool loop. multi: Researcher -> Coder -> Reviewer LangGraph.",
     )
     parser.add_argument(
+        "--reviewer", choices=sorted(REVIEWERS), default=None,
+        help=f"Reviewer version for --mode multi (default {DEFAULT_REVIEWER}). v1 = M3 baseline.",
+    )
+    parser.add_argument(
         "--repeats", type=int, default=1,
         help="Run each selected bug this many times and write one combined, aggregated report.",
     )
@@ -242,6 +262,11 @@ def main() -> int:
     if args.repeats < 1:
         print("--repeats must be >= 1", file=sys.stderr)
         return 1
+
+    if args.reviewer and args.mode != "multi":
+        print("--reviewer only applies to --mode multi", file=sys.stderr)
+        return 1
+    reviewer = (args.reviewer or DEFAULT_REVIEWER) if args.mode == "multi" else None
 
     if not config.ANTHROPIC_API_KEY:
         print("ANTHROPIC_API_KEY is not set (checked .env and the environment). Aborting.", file=sys.stderr)
@@ -254,7 +279,7 @@ def main() -> int:
     run_dir.mkdir(parents=True, exist_ok=True)
     workspaces_root.mkdir(parents=True, exist_ok=True)
 
-    print(f"Model: {model}  Mode: {args.mode}")
+    print(f"Model: {model}  Mode: {args.mode}" + (f"  Reviewer: {reviewer}" if reviewer else ""))
     print("Warming up sandbox container...")
     sandbox.warm_up()
 
@@ -267,7 +292,7 @@ def main() -> int:
         rows = []
         for bug_id in bug_ids:
             print(f"Running {bug_id}...")
-            row = run_one_bug(bug_id, run_dir, workspaces_root, model, mode=args.mode)
+            row = run_one_bug(bug_id, run_dir, workspaces_root, model, mode=args.mode, reviewer=reviewer)
             rows.append(row)
 
         print_table(rows)
@@ -275,14 +300,14 @@ def main() -> int:
             print_review_decisions(rows)
             print(f"\nTotal estimated cost: ${sum(r['estimated_cost_usd'] for r in rows):.6f}")
 
-        report_path = REPORTS_DIR / f"baseline_{args.mode}_{model}_{run_id}.json"
+        report_path = REPORTS_DIR / report_filename("baseline", args.mode, reviewer, model, run_id)
         report_path.write_text(json.dumps(rows, indent=2), encoding="utf-8")
         print(f"\nWrote {report_path}")
         print(f"Trajectory logs: {run_dir}")
         return 0
 
     per_bug, all_attempts = run_bugs_with_repeats(
-        bug_ids, run_dir, workspaces_root, model, args.repeats, mode=args.mode
+        bug_ids, run_dir, workspaces_root, model, args.repeats, mode=args.mode, reviewer=reviewer
     )
     overall = aggregate.aggregate_overall(per_bug, all_attempts)
 
@@ -295,11 +320,12 @@ def main() -> int:
         f"Total estimated cost: ${overall['total_estimated_cost_usd']:.6f}"
     )
 
-    report_path = REPORTS_DIR / f"repeats_{args.mode}_{model}_{args.repeats}x_{run_id}.json"
+    report_path = REPORTS_DIR / report_filename("repeats", args.mode, reviewer, model, run_id, args.repeats)
     report_path.write_text(
         json.dumps(
             {
                 "mode": args.mode,
+                "reviewer": reviewer,
                 "model": model,
                 "run_id": run_id,
                 "repeats": args.repeats,
