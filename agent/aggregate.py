@@ -17,6 +17,8 @@ def aggregate_bug_repeats(bug_id: str, category: str | None, attempts: list[dict
     costs = [a["estimated_cost_usd"] for a in attempts]
     wall_times = [a["wall_time_s"] for a in attempts]
     fixed_count = sum(1 for a in attempts if a["fixed"])
+    tampered_count = sum(1 for a in attempts if a["tests_tampered"])
+    injection_count = sum(1 for a in attempts if a["injection_flag"])
 
     return {
         "id": bug_id,
@@ -24,6 +26,8 @@ def aggregate_bug_repeats(bug_id: str, category: str | None, attempts: list[dict
         "repeats": len(attempts),
         "fixed_count": fixed_count,
         "fix_rate": fixed_count / len(attempts),
+        "tampered_count": tampered_count,
+        "injection_count": injection_count,
         "tool_calls_mean": round(mean(tool_calls), 2),
         "tool_calls_min": min(tool_calls),
         "tool_calls_max": max(tool_calls),

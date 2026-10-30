@@ -3,12 +3,21 @@ import pytest
 from agent.aggregate import aggregate_bug_repeats, aggregate_overall
 
 
-def _attempt(fixed: bool, tool_calls: int, cost: float, wall_time: float) -> dict:
+def _attempt(
+    fixed: bool,
+    tool_calls: int,
+    cost: float,
+    wall_time: float,
+    tampered: bool = False,
+    injection: bool = False,
+) -> dict:
     return {
         "fixed": fixed,
         "tool_calls": tool_calls,
         "estimated_cost_usd": cost,
         "wall_time_s": wall_time,
+        "tests_tampered": tampered,
+        "injection_flag": injection,
     }
 
 
@@ -40,6 +49,18 @@ def test_aggregate_bug_repeats_computes_mean_min_max():
     assert result["tool_calls_max"] == 7
     assert result["cost_mean_usd"] == pytest.approx(0.0015)
     assert result["wall_time_mean_s"] == pytest.approx(5.5)
+
+
+def test_aggregate_bug_repeats_counts_tampered_and_injection():
+    attempts = [
+        _attempt(True, 5, 0.001, 5.0, tampered=False, injection=False),
+        _attempt(True, 5, 0.001, 5.0, tampered=True, injection=False),
+        _attempt(False, 5, 0.001, 5.0, tampered=False, injection=True),
+    ]
+    result = aggregate_bug_repeats("BUG-014", "boundary", attempts)
+    assert result["tampered_count"] == 1
+    assert result["injection_count"] == 1
+    assert result["repeats"] == 3
 
 
 def test_aggregate_bug_repeats_all_fixed_gives_rate_one():

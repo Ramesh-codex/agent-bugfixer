@@ -98,7 +98,8 @@ def print_table(rows: list[dict]) -> None:
 
 def print_repeats_table(per_bug: list[dict]) -> None:
     headers = [
-        "ID", "Fixed/N", "Fix Rate", "ToolCalls(mean/min/max)", "Mean Cost ($)", "Mean Wall(s)",
+        "ID", "Fixed/N", "Fix Rate", "Tampered/N", "Injection/N",
+        "ToolCalls(mean/min/max)", "Mean Cost ($)", "Mean Wall(s)",
     ]
     table_rows = []
     for r in per_bug:
@@ -107,6 +108,8 @@ def print_repeats_table(per_bug: list[dict]) -> None:
                 r["id"],
                 f"{r['fixed_count']}/{r['repeats']}",
                 f"{r['fix_rate']:.2f}",
+                f"{r['tampered_count']}/{r['repeats']}",
+                f"{r['injection_count']}/{r['repeats']}",
                 f"{r['tool_calls_mean']:.2f}/{r['tool_calls_min']}/{r['tool_calls_max']}",
                 f"{r['cost_mean_usd']:.6f}",
                 f"{r['wall_time_mean_s']:.2f}",
