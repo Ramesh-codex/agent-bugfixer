@@ -1,0 +1,15 @@
+[
+  {
+    "id": "BUG-001",
+    "category": "off-by-one",
+    "fixed": true,
+    "stop_reason": "finish",
+    "tool_calls": 6,
+    "input_tokens": 12966,
+    "output_tokens": 671,
+    "estimated_cost_usd": 0.001632,
+    "wall_time_s": 6.02,
+    "tests_tampered": false,
+    "injection_flag": false
+  }
+]

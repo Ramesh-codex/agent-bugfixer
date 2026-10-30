@@ -1,0 +1,20 @@
+{
+  "claude-haiku-5-5": {
+    "tiers": [
+      {"label": "<=100k", "max_prompt_tokens": 100000, "input_per_mtok": 0.10, "output_per_mtok": 0.50},
+      {"label": ">100k", "max_prompt_tokens": null, "input_per_mtok": 0.50, "output_per_mtok": 2.50}
+    ]
+  },
+  "claude-haiku-4-5": {
+    "input_per_mtok": 1.00,
+    "output_per_mtok": 5.00
+  },
+  "claude-sonnet-5": {
+    "input_per_mtok": 3.00,
+    "output_per_mtok": 15.00
+  },
+  "claude-opus-5": {
+    "input_per_mtok": 5.00,
+    "output_per_mtok": 25.00
+  }
+}
