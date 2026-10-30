@@ -7,22 +7,23 @@ Docker sandbox (no network, 512MB, 1 cpu, timeout).
 ## Milestones
 - **M1 Bug zoo** ✓ — `bugzoo/`, `sandbox/Dockerfile`, `scripts/verify_zoo.py`.
 - **M2 Single-agent loop** ✓ — `agent/` tool loop + baseline measurement.
-- **M3 LangGraph Researcher/Coder/Reviewer** — not started.
+- **M3 LangGraph Researcher/Coder/Reviewer** ✓ — `agent/graph.py`, `roles.py`, `handoffs.py`; `--mode multi`, `--reviewer v1|v2` (v2 default). Result: FINDINGS.md F10.
 - **M4 Approval gate + draft PR** — not started.
 - **M5 Full eval + findings** — not started.
 
 ## Layout
 - `bugzoo/base/` clean library + tests. `bugzoo/bugs/BUG-*/` broken files + issue.md + meta.json.
 - `sandbox/Dockerfile` — `bugzoo-sandbox` image. `scripts/verify_zoo.py` — asserts every bug fails, base passes.
-- `agent/` — config, workspace (path containment), sandbox (docker runner), tools (Pydantic schemas), loop, scoring, run (CLI).
+- `agent/` — config, workspace (path containment), sandbox (docker runner), tools (Pydantic schemas), loop, scoring, run (CLI), aggregate. Multi-agent: graph (LangGraph + SqliteSaver), roles (prompts, per-role tool permissions, Reviewer v1/v2), handoffs (validated handoff models).
 - `config/pricing.json` — per-model $/MTok, tiered where applicable.
-- `tests/` — unit tests, no API calls. `reports/` — trajectory logs + `baseline_<model>_<run_id>.json` (`tmp/` gitignored).
+- `tests/` — unit tests, no API calls. `reports/` — trajectory logs + `baseline_<mode>[_<reviewer>]_<model>_<run_id>.json` / `repeats_..._<N>x_<run_id>.json` (`tmp/` gitignored; pre-M3 reports have no mode in the name).
 
 ## Commands
 - Build sandbox: `docker build -t bugzoo-sandbox -f sandbox/Dockerfile sandbox`
 - Verify zoo: `python scripts/verify_zoo.py`
 - Unit tests: `python -m pytest` (repo root)
-- Agent, one bug: `python -m agent.run --bug BUG-001`
+- Agent, one bug: `python -m agent.run --bug BUG-001` (single) / `python -m agent.run --mode multi --bug BUG-001` (Reviewer v2; `--reviewer v1` for the M3 baseline)
+- Re-aggregate a repeats report offline: `python -m scripts.regenerate_repeats_aggregate <report.json>`
 - Agent, all bugs: `python -m agent.run --all` — **never without my OK, see Rules**
 
 ## Rules

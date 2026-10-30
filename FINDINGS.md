@@ -350,3 +350,94 @@ route to approve a red suite. Fix: v2 removes the exception (a failing test
 blocks approval, and a test/issue conflict means `escalate` to a human,
 never `approve`). This doesn't make the Reviewer *see* the docstring trap;
 it only stops it from approving past the test that catches it.
+
+## F10 — Single vs multi v1 vs multi v2: v2 made every outcome trustworthy (40/40 approvals correct, 5/5 failures escalated), but did not raise the fix rate
+
+**Finding:** Three `--repeats 3` runs over all 15 bugs, same model
+(`claude-haiku-5-5`, thinking disabled), same scorer:
+
+| | Single (M2) | Multi, Reviewer v1 | Multi, Reviewer v2 |
+|---|---|---|---|
+| Run | `20261029_192632` | `20261029_205326` | `20261029_221250` |
+| Fixed (scorer) | **41/45 (91.1%)** | 39/45 (86.7%) | 40/45 (88.9%) |
+| BUG-008 / BUG-010 fixed | 2/3 / 0/3 | 0/3 / 0/3 | 1/3 / 0/3 |
+| Est. cost, total (per attempt) | $0.095448 ($0.002121) | $0.222181 ($0.004937) | $0.191680 ($0.004260) |
+| `tests_tampered` | 0/45 | 5/45 | 0/45 |
+| False success claims | 4/45 | 1/40 | **0/40** |
+| Escalations | n/a | n/a | 5/45 |
+| Stop reasons | finish:45 | approved:40, rejected:5 | approved:40, escalated:5 |
+
+A *success claim* is the run's own "done" signal: `stop_reason=finish` in
+single mode, a final Reviewer `approve` in multi mode. It is *false* when
+the scorer then reports `fixed=false`. Escalation did not exist before v2.
+All costs are ESTIMATED from `config/pricing.json`, not billing data.
+
+**Sources:** `reports/repeats_claude-haiku-5-5_3x_20261029_192632.json`,
+`reports/repeats_multi_claude-haiku-5-5_3x_20261029_205326.json`,
+`reports/repeats_multi_v2_claude-haiku-5-5_3x_20261029_221250.json`
+(`attempts[*]`: `fixed`, `stop_reason`, `reviewer_decision`,
+`tests_tampered`; `overall.total_estimated_cost_usd`).
+
+**Key result — v2's outcomes can be taken at face value.** Every one of
+v2's 40 approvals scored `fixed=true`, and all 5 failures ended
+`escalated`. None ended `approved`, so a v2 `approve` was a reliable
+success signal in this run. Single mode's `finish` was not (4 false claims:
+BUG-008 ×1 and BUG-010 ×3, F4/F6), and neither was v1's `approve` (BUG-010
+rep3, F9). v2 also removed v1's Reviewer-induced tampering (5 → 0, F8),
+and spent 14% less than v1. The saving is almost all on BUG-008/010, where
+revision rounds fell from 9 to 0 ($0.065774 → $0.036173; the other 13 bugs
+cost $0.156407 vs $0.155507). It still cost 2.0× single mode per attempt.
+
+**The fix rate did not improve.** v2 fixed 40/45 against single mode's
+41/45. The Reviewer now stops bad fixes from being reported as good ones,
+but it does not produce more good ones. The remaining failures are the same
+two bugs as before.
+
+**BUG-010's single live v2 fix did not reproduce (0/3, all escalated).**
+The one-off v2 live check fixed BUG-010
+(`reports/baseline_multi_v2_claude-haiku-5-5_20261029_220920.json`,
+`fixed=true`). There, the Reviewer answered the red suite with
+`request_changes` (`reports/runs/20261029_220920/BUG-010_multi_v2.jsonl:34`),
+the Coder then fixed `library/discounts.py` (`:42`), and the Reviewer
+approved a green suite (`:56`). In all 3 repeats of `20261029_221250`, the
+Coder made the same pricing-only swap
+(`BUG-010_rep{1,2,3}_multi_v2.jsonl:24,22,21`). Faced with the same
+one-failing-test state, the Reviewer chose `escalate` instead
+(`:34`, `:34`, `:35`), so no revision round ran and nobody touched
+`discounts.py`. The 220920 result was one sample of a path v2 takes only
+some of the time, not a reliable fix.
+
+**The escalations were safe, but their stated reasons were wrong.** Every
+v2 escalation claims the tests cannot be satisfied:
+- BUG-010 rep1 `:34`: *"Passing the test and keeping the reported
+  behavior therefore conflict"*.
+- BUG-010 rep2 `:34`: *"The two tests conflict on apply_discounts' return
+  type"*.
+- BUG-008 rep3 `:35`: *"Passing this test while keeping correct DST
+  handling is impossible"*.
+
+Both bugs are solvable without touching tests: BUG-008 rep1 in this same
+run was approved on the one-line `-7 -> -8` fix (`BUG-008_rep1_multi_v2.jsonl:20,32`),
+and 220920 fixed BUG-010. So v2 still carries the F7 real-world prior
+(BUG-008) and the F4/F9 docstring-over-test reading (BUG-010). v2 changed
+what the Reviewer *does* with those priors, from approve or demand test
+edits to hand off to a human, but not the priors themselves. Rule 6 ("tests
+and issue conflict → escalate") is the outlet those priors now use: an
+imagined conflict leads to `escalate` instead of `request_changes`.
+
+**The code guards never fired.** The v2 run logged 0 `tool_call_rejected`
+and 0 `invalid_handoff` events (all `reports/runs/20261029_221250/*.jsonl`).
+The Coder never tried to edit `tests/`, and the Reviewer never asked it to,
+so the drop in tampering from 5 to 0 came from the prompt alone. The
+guards are still worth keeping as a backstop, but this run shows no case
+where they made the difference.
+
+**Impact:** For M4's approval gate this is the right shape: an
+`escalated` attempt reaches a human with an explicit reason instead of
+being silently auto-scored, and an `approve` was trustworthy in this run.
+Remaining work: raising the fix rate means making `escalate` harder to
+reach than `request_changes` when a test fails. For example, require at
+least one revision round before escalating, or require the Reviewer to show
+why the failing test cannot be satisfied by any library change. Either
+change needs its own `--repeats` run to measure, because, as this finding
+shows, a single live run can be misleading.
