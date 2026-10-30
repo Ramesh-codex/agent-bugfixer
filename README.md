@@ -177,6 +177,82 @@ changes.
 | `GITHUB_BASE_BRANCH` | `review pr` | `main` |
 | `TARGET_REPO_SUBDIR` | `review pr` (library location inside the clone) | repo root |
 
+## Live mode (GitHub Actions)
+
+The same Researcher → Coder → Reviewer (v2) graph can run on real issues in a
+target repo ([bugzoo-target](https://github.com/Ramesh-codex/bugzoo-target)).
+The repo owner controls it from the issue:
+
+1. The owner adds the label `agent-fix` to an issue. `agent-propose.yml` runs
+   `python -m agent.gh_issue` on that issue against the repo checkout. It then
+   posts **one** comment with the root cause, the diff, the Reviewer's reasons,
+   the test result and the estimated cost, or the Reviewer's escalation
+   question. It labels the issue `needs-approval` or `needs-decision`, and
+   uploads the patch as a workflow artifact.
+2. The owner comments `/approve` or `/reject`. On `/approve`,
+   `agent-approve.yml` downloads that run's patch and checks its sha256 and
+   paths. It applies the patch on `agent/issue-<N>`, pushes, and opens a
+   **draft** PR that says `Refs #<N>`. On `/reject`, it only adds the label
+   `rejected`. Nothing is pushed before `/approve`.
+
+```bash
+# What the propose workflow runs (also works locally on any pytest repo):
+python -m agent.gh_issue --repo-path ../bugzoo-target --issue-file issue.json [--out-dir DIR] [--run-id ID]
+# issue.json: {"number": 3, "title": "...", "body": "..."}
+# Writes to DIR (default reports/tmp/gh_issue/<run_id>/): comment.md, fix.patch (if any),
+# labels.txt, summary.json, trajectory.jsonl
+```
+
+`agent/gh_issue.py` makes no GitHub API calls. It writes files, and the
+workflow posts them with `gh`. The workflow checks (command parsing, actor
+check, run marker, patch and path checks) are in the stdlib-only
+[`agent/gh_live.py`](agent/gh_live.py). The workflow files are kept here in
+[`live/workflows/`](live/workflows/), so the unit tests can scan them. The
+copies in bugzoo-target must match, except for the pinned commit.
+
+**How live mode differs from the bug zoo.** There is no separate pristine copy
+of the tests. The snapshot taken before the agents start comes from the same
+repo, so the Coder's `tests/` edit block is the main guard. After the graph
+ends, two checks run:
+
+- The diff may not touch protected paths: `tests/` or `test/` at any depth,
+  `test_*.py`/`*_test.py`, `conftest.py`, `pytest.ini`, `pyproject.toml`,
+  `setup.cfg`, `tox.ini`, `.github/`. A patch that does is never saved.
+- The full suite runs in the sandbox (`--network none`) with the snapshot's
+  `tests/` restored.
+
+The label is `needs-approval` only if the Reviewer approved, the suite passed
+and a patch was saved. Every other outcome gets `needs-decision`. The owner can
+still `/approve` any saved patch.
+
+**Workflow security.**
+
+- Triggers are only `issues: labeled` and `issue_comment: created`, never
+  `pull_request_target`. Nothing runs on forks.
+- Every job requires `github.actor == github.repository_owner` and an exact
+  label or command. Both checks run again in Python inside the job.
+- No `${{ }}` expression appears in a `run:` line. The issue reaches the agent
+  as a JSON file built by `jq` from `$GITHUB_EVENT_PATH`, and the comment body
+  arrives through an env var. A unit test scans both workflow files for this.
+- Permissions are set per job: propose has `contents: read, issues: write`;
+  approve has `contents: write, pull-requests: write, issues: write, actions:
+  read`; reject has `issues: write`. The workflow default is `{}`.
+- Actions are pinned to commit SHAs. agent-bugfixer is checked out at a pinned
+  commit (`AGENT_BUGFIXER_REF`).
+- `ANTHROPIC_API_KEY` is only in the env of the agent step.
+- `/approve` reads the run id from a hidden marker in a `github-actions[bot]`
+  comment. Markers from anyone else are ignored. The patch must match the
+  marker's sha256 and pass the path check twice: once on the patch file, and
+  once on what `git apply` actually staged.
+- Every job has `timeout-minutes`, and there is one concurrency group per
+  issue. Run caps come from the environment: `AGENT_MULTI_COST_BUDGET_USD` (set
+  to 0.25 in the workflow), `AGENT_MULTI_TOKEN_BUDGET`,
+  `AGENT_WALL_CLOCK_TIMEOUT_S`, plus the tool-call and revision limits.
+
+**Limits of live mode.** The sandbox image only has pytest, so a target repo
+with other dependencies needs its own image. The agents can edit existing files
+but cannot create or delete them.
+
 ## Limitations and future work
 
 - **Small benchmark.** The zoo has 15 hand-seeded bugs in one small library, so

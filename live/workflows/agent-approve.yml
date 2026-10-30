@@ -1,0 +1,194 @@
+# agent-bugfixer live mode, step 2 of 2: act on the owner's decision.
+#
+# Trigger: the repository owner comments exactly `/approve` or `/reject` on
+# an issue that agent-propose.yml has commented on.
+#   /approve: download that run's patch artifact, verify its checksum and that
+#             it touches nothing under tests/ (or test config / CI), apply it on
+#             branch agent/issue-<N>, push, open a DRAFT PR that says "Refs #<N>".
+#   /reject:  label the issue `rejected`. Nothing else.
+#
+# Security notes:
+# - Never pull_request_target; only `issue_comment: created`, issues only (not
+#   PR comments), owner only, skipped on forks.
+# - The comment body reaches our code only via the COMMENT_BODY env var.
+# - The run id comes from a hidden marker in a comment by github-actions[bot],
+#   and the patch must match the sha256 recorded there.
+# - No Anthropic key here; the GITHUB_TOKEN is scoped per job.
+
+name: agent-approve
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+concurrency:
+  group: agent-issue-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+env:
+  AGENT_BUGFIXER_REPO: Ramesh-codex/agent-bugfixer
+  # Exact agent-bugfixer commit to run (never a branch). Bump it deliberately.
+  AGENT_BUGFIXER_REF: REPLACE_WITH_AGENT_BUGFIXER_COMMIT_SHA
+
+jobs:
+  approve:
+    if: >-
+      github.event.comment.body == '/approve' &&
+      github.event.issue.pull_request == null &&
+      github.actor == github.repository_owner &&
+      github.event.comment.user.login == github.repository_owner &&
+      !github.event.repository.fork
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: read
+    steps:
+      - name: Check out agent-bugfixer (pinned commit)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.AGENT_BUGFIXER_REPO }}
+          ref: ${{ env.AGENT_BUGFIXER_REF }}
+          path: agent-bugfixer
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+
+      - name: Re-check the command and the actor
+        working-directory: agent-bugfixer
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          ACTOR: ${{ github.actor }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          test "$(python -m agent.gh_live command)" = approve
+          python -m agent.gh_live check-actor
+
+      - name: Find the run marker
+        id: marker
+        working-directory: agent-bugfixer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER/comments" > "$RUNNER_TEMP/comments.json"
+          python -m agent.gh_live find-marker --comments "$RUNNER_TEMP/comments.json" --issue "$ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - name: Download and check the patch
+        working-directory: agent-bugfixer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          RUN_ID: ${{ steps.marker.outputs.run_id }}
+          PATCH_SHA256: ${{ steps.marker.outputs.patch_sha256 }}
+        run: |
+          if [ -z "$PATCH_SHA256" ]; then echo "::error::that run produced no patch to approve"; exit 1; fi
+          run_path=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" --jq .path)
+          if [ "$run_path" != ".github/workflows/agent-propose.yml" ]; then echo "::error::run is not from agent-propose.yml"; exit 1; fi
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "agent-patch-$ISSUE_NUMBER" --dir "$RUNNER_TEMP/patch"
+          python -m agent.gh_live check-patch --patch "$RUNNER_TEMP/patch/fix.patch" --sha256 "$PATCH_SHA256"
+
+      - name: Check out this repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: target
+          fetch-depth: 0
+
+      - name: Apply the patch on agent/issue-<N>
+        working-directory: target
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          BASE_SHA: ${{ steps.marker.outputs.base_sha }}
+        run: |
+          branch="agent/issue-$ISSUE_NUMBER"
+          if git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+            echo "::error::branch $branch already exists on origin"; exit 1
+          fi
+          git checkout -b "$branch" "${BASE_SHA:-HEAD}"
+          git apply --index --check "$RUNNER_TEMP/patch/fix.patch"
+          git apply --index "$RUNNER_TEMP/patch/fix.patch"
+          git diff --cached --name-only > "$RUNNER_TEMP/paths.txt"
+
+      - name: Re-check what git actually staged
+        working-directory: agent-bugfixer
+        run: python -m agent.gh_live check-paths --paths-file "$RUNNER_TEMP/paths.txt"
+
+      - name: Commit, push, open a draft PR
+        working-directory: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          RUN_ID: ${{ steps.marker.outputs.run_id }}
+          PATCH_SHA256: ${{ steps.marker.outputs.patch_sha256 }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          branch="agent/issue-$ISSUE_NUMBER"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -q -m "agent-bugfixer: proposed fix for issue #$ISSUE_NUMBER" -m "Refs #$ISSUE_NUMBER" -m "Approved with /approve by the repository owner. Proposal run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$RUN_ID"
+          git push origin "$branch"
+          cat > "$RUNNER_TEMP/pr-body.md" <<EOF
+          Refs #$ISSUE_NUMBER
+
+          Draft PR opened by agent-bugfixer after the repository owner commented \`/approve\`.
+          Root cause, reviewer reasons and test results are in the issue comment from the proposal run.
+
+          - Proposal run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$RUN_ID
+          - Approval run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+          - Patch sha256: \`$PATCH_SHA256\`
+          EOF
+          gh pr create --repo "$GITHUB_REPOSITORY" --draft --base "$BASE_BRANCH" --head "$branch" --title "agent-bugfixer: fix for issue #$ISSUE_NUMBER" --body-file "$RUNNER_TEMP/pr-body.md"
+
+      - name: Report a refused or failed approval
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "/approve was refused or failed; no PR was opened. Details: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+  reject:
+    if: >-
+      github.event.comment.body == '/reject' &&
+      github.event.issue.pull_request == null &&
+      github.actor == github.repository_owner &&
+      github.event.comment.user.login == github.repository_owner &&
+      !github.event.repository.fork
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Check out agent-bugfixer (pinned commit)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.AGENT_BUGFIXER_REPO }}
+          ref: ${{ env.AGENT_BUGFIXER_REF }}
+          path: agent-bugfixer
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+
+      - name: Re-check the command and the actor
+        working-directory: agent-bugfixer
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          ACTOR: ${{ github.actor }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          test "$(python -m agent.gh_live command)" = reject
+          python -m agent.gh_live check-actor
+
+      - name: Label the issue rejected
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --add-label rejected

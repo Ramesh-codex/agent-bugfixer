@@ -1,0 +1,132 @@
+# agent-bugfixer live mode, step 1 of 2: propose a fix for an issue.
+#
+# Trigger: the repository owner adds the label `agent-fix` to an issue.
+# Runs the Researcher -> Coder -> Reviewer (v2) pipeline from agent-bugfixer
+# against this repo's checkout, uploads the patch as an artifact, and posts
+# ONE comment with the result. Nothing is pushed; see agent-approve.yml.
+#
+# Security notes:
+# - Never pull_request_target; only `issues: labeled`. Skipped on forks.
+# - Issue title/body reach the agent only through a JSON file built by jq
+#   from $GITHUB_EVENT_PATH, never through ${{ }} interpolation in `run:`.
+# - ANTHROPIC_API_KEY is in the env of the agent step only.
+# - Tests run in a Docker sandbox with --network none.
+
+name: agent-propose
+
+on:
+  issues:
+    types: [labeled]
+
+permissions: {}
+
+concurrency:
+  group: agent-issue-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+env:
+  AGENT_BUGFIXER_REPO: Ramesh-codex/agent-bugfixer
+  # Exact agent-bugfixer commit to run (never a branch). Bump it deliberately.
+  AGENT_BUGFIXER_REF: REPLACE_WITH_AGENT_BUGFIXER_COMMIT_SHA
+
+jobs:
+  propose:
+    if: >-
+      github.event.label.name == 'agent-fix' &&
+      github.actor == github.repository_owner &&
+      github.event.sender.login == github.repository_owner &&
+      !github.event.repository.fork
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Check out this repo (the code to fix)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: target
+          persist-credentials: false
+
+      - name: Check out agent-bugfixer (pinned commit)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.AGENT_BUGFIXER_REPO }}
+          ref: ${{ env.AGENT_BUGFIXER_REF }}
+          path: agent-bugfixer
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+
+      - name: Re-check the actor
+        working-directory: agent-bugfixer
+        env:
+          ACTOR: ${{ github.actor }}
+          OWNER: ${{ github.repository_owner }}
+        run: python -m agent.gh_live check-actor
+
+      - name: Install agent-bugfixer
+        working-directory: agent-bugfixer
+        run: pip install -r requirements.txt
+
+      - name: Build the test sandbox image
+        working-directory: agent-bugfixer
+        run: docker build -t bugzoo-sandbox -f sandbox/Dockerfile sandbox
+
+      - name: Write the issue to a JSON file (untrusted data, never interpolated)
+        run: |
+          jq '{number: .issue.number, title: (.issue.title // ""), body: (.issue.body // "")}' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/issue.json"
+
+      - name: Run the multi-agent pipeline
+        working-directory: agent-bugfixer
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AGENT_MODEL: claude-haiku-5-5
+          AGENT_MULTI_COST_BUDGET_USD: "0.25"
+          AGENT_MULTI_TOKEN_BUDGET: "400000"
+          AGENT_WALL_CLOCK_TIMEOUT_S: "900"
+        run: python -m agent.gh_issue --repo-path "$GITHUB_WORKSPACE/target" --issue-file "$RUNNER_TEMP/issue.json" --out-dir "$GITHUB_WORKSPACE/agent-out" --run-id "$GITHUB_RUN_ID"
+
+      - name: Upload the patch
+        if: hashFiles('agent-out/fix.patch') != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: agent-patch-${{ github.event.issue.number }}
+          path: agent-out/fix.patch
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload the trajectory and summary
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: agent-log-${{ github.event.issue.number }}
+          path: |
+            agent-out/trajectory.jsonl
+            agent-out/summary.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Post the comment and label the issue
+        id: comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file agent-out/comment.md
+          while IFS= read -r label; do
+            case "$label" in
+              needs-approval|needs-decision)
+                gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --add-label "$label" ;;
+            esac
+          done < agent-out/labels.txt
+
+      - name: Report a failed run
+        if: failure() && steps.comment.outcome != 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "agent-propose failed before it could post a result: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

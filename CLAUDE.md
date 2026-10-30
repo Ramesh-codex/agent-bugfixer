@@ -10,6 +10,7 @@ Docker sandbox (no network, 512MB, 1 cpu, timeout).
 - **M3 LangGraph Researcher/Coder/Reviewer** ✓ — `agent/graph.py`, `roles.py`, `handoffs.py`; `--mode multi`, `--reviewer v1|v2` (v2 default). Result: FINDINGS.md F10.
 - **M4 Approval gate + draft PR** — built: `agent/proposals.py` (SQLite `reports/proposals.sqlite`), `agent/review.py` (CLI), `agent/pr.py` (gate, git, GitHub REST). Offline-tested; no real PR opened yet (user does that).
 - **M5 Portfolio packaging** — built: README.md, .env.example, LICENSE (MIT), `.github/workflows/ci.yml` (unit tests + verify_zoo, no secrets). Not pushed; screenshots in `docs/img/` pending.
+- **M6 Live mode (GitHub Actions)** — built: `agent/gh_issue.py` (entry point, writes comment/patch/labels/summary files, no GitHub API), `agent/gh_live.py` (stdlib-only workflow checks), `live/workflows/agent-{propose,approve}.yml` (canonical copies; bugzoo-target holds identical ones except `AGENT_BUGFIXER_REF`). Not committed/pushed; secrets, labels and settings are the user's.
 
 ## Layout
 - `bugzoo/base/` clean library + tests. `bugzoo/bugs/BUG-*/` broken files + issue.md + meta.json.
@@ -26,6 +27,7 @@ Docker sandbox (no network, 512MB, 1 cpu, timeout).
 - Re-aggregate a repeats report offline: `python -m scripts.regenerate_repeats_aggregate <report.json>`
 - Proposals (created by multi runs that end approved/escalated): `python -m agent.review list | show <id> | approve <id> [--reason] | reject <id> --reason "..."`
 - Draft PR (approved only): `python -m agent.review pr <id> [--dry-run]` — needs `GITHUB_REPO`, `GITHUB_TOKEN`, `TARGET_REPO_PATH` (local clone) in .env; optional `GITHUB_BASE_BRANCH` (main), `TARGET_REPO_SUBDIR`
+- Live mode, one issue (1 multi-agent run): `python -m agent.gh_issue --repo-path <dir> --issue-file <json> [--out-dir DIR]`
 - Agent, all bugs: `python -m agent.run --all` — **never without my OK, see Rules**
 
 ## Rules
