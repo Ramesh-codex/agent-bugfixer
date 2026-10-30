@@ -184,3 +184,44 @@ def test_run_tests_rejects_nonexistent_test_path(workspace):
         "run_tests", {"test_path": "tests/does_not_exist.py"}, workspace
     )
     assert is_error is True
+
+
+# --- edit_file preserves line endings ------------------------------------
+
+def test_edit_file_preserves_crlf(workspace):
+    target = workspace / "library" / "crlf.py"
+    target.write_bytes(b"def add(a, b):\r\n    return a - b\r\n")
+
+    _, is_error = tools.dispatch_tool(
+        "edit_file",
+        # the model sees LF (read_file uses universal newlines) and edits in LF
+        {"path": "library/crlf.py", "old_string": "    return a - b\n", "new_string": "    # fixed\n    return a + b\n"},
+        workspace,
+    )
+
+    assert not is_error
+    assert target.read_bytes() == b"def add(a, b):\r\n    # fixed\r\n    return a + b\r\n"
+
+
+def test_edit_file_preserves_lf(workspace):
+    target = workspace / "library" / "lf.py"
+    target.write_bytes(b"def add(a, b):\n    return a - b\n")
+
+    _, is_error = tools.dispatch_tool(
+        "edit_file", {"path": "library/lf.py", "old_string": "a - b", "new_string": "a + b"}, workspace
+    )
+
+    assert not is_error
+    assert target.read_bytes() == b"def add(a, b):\n    return a + b\n"  # no CRLF, even on Windows
+
+
+def test_edit_file_leaves_other_lines_of_mixed_file_alone(workspace):
+    target = workspace / "library" / "mixed.py"
+    target.write_bytes(b"a = 1\r\nb = 2\nc = 3\r\n")
+
+    _, is_error = tools.dispatch_tool(
+        "edit_file", {"path": "library/mixed.py", "old_string": "b = 2", "new_string": "b = 20"}, workspace
+    )
+
+    assert not is_error
+    assert target.read_bytes() == b"a = 1\r\nb = 20\nc = 3\r\n"

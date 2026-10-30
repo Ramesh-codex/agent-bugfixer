@@ -247,6 +247,7 @@ class MultiResult:
     estimated_cost_usd: float
     wall_time_s: float
     injection_flag: bool
+    research_report: dict | None = None
 
 
 def run_multi_agent(
@@ -298,6 +299,7 @@ def run_multi_agent(
         estimated_cost_usd=round(cost, 6),
         wall_time_s=wall,
         injection_flag=state["injection_flag"],
+        research_report=state.get("research_report"),
     )
     logger.log(
         {"event": "run_end", "mode": "multi", "reviewer_version": result.reviewer_version, "stop_reason": result.stop_reason, "stop_agent": result.stop_agent,

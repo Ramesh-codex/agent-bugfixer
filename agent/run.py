@@ -13,10 +13,12 @@ import time
 from pathlib import Path
 
 from agent import aggregate, config, sandbox, scoring
+from agent.proposals import PROPOSAL_STOP_REASONS, ProposalStore
 from agent.graph import run_multi_agent
 from agent.loop import LoopLimits, run_agent_loop
 from agent.logging_utils import TrajectoryLogger
 from agent.roles import DEFAULT_REVIEWER, REVIEWERS, AnthropicModelClient
+from agent.tools import workspace_diff
 from agent.workspace import materialize_workspace
 
 BUGS_DIR = config.ROOT / "bugzoo" / "bugs"
@@ -98,8 +100,23 @@ def _run_one_bug_multi(
     finally:
         logger.close()
 
+    # The agents' diff, taken before scoring restores the pristine tests/.
+    changed_files, diff = workspace_diff(workspace, baseline)
+
     # Same scoring as single mode, only after the graph has ended.
     score = scoring.score_run(workspace)
+
+    proposal_id = None
+    if result.stop_reason in PROPOSAL_STOP_REASONS:
+        proposal_id = ProposalStore().save(
+            run_id=run_dir.name, attempt=stem, bug_id=bug_id, category=meta.get("category"),
+            model=model, reviewer_version=result.reviewer_version, stop_reason=result.stop_reason,
+            changed_files=changed_files, diff=diff, research=result.research_report,
+            review_decisions=result.review_decisions, tests_fixed=score["fixed"],
+            tests_output=score["test_output"], tests_tampered=score["tests_tampered"],
+            estimated_cost_usd=result.estimated_cost_usd,
+        )
+        print(f"Saved proposal {proposal_id} ({result.stop_reason}); review with: python -m agent.review show {proposal_id}")
 
     return {
         "id": bug_id,
@@ -122,6 +139,7 @@ def _run_one_bug_multi(
         "tests_tampered": score["tests_tampered"],
         "injection_flag": result.injection_flag,
         "thread_id": thread_id,
+        "proposal_id": proposal_id,
     }
 
 

@@ -252,8 +252,18 @@ def _run_edit_file(workspace: Path, args: EditFileArgs) -> dict:
     target = resolve_in_workspace(workspace, args.path)
     if not target.exists() or not target.is_file():
         raise ToolError(f"no such file: {args.path}")
-    text = target.read_text(encoding="utf-8")
-    count = text.count(args.old_string)
+    # newline="" on both read and write: no newline translation, so the file
+    # keeps its own line endings (a plain write_text on Windows would turn
+    # every LF into CRLF). The model sees "\n" via read_file, so a pure-CRLF
+    # file is edited in LF form and converted back. Mixed files are edited raw.
+    raw = target.read_text(encoding="utf-8", newline="")
+    crlf = "\r\n" in raw and raw.count("\r\n") == raw.count("\n")
+    text = raw.replace("\r\n", "\n") if crlf else raw
+    old_string, new_string = args.old_string, args.new_string
+    if crlf:
+        old_string = old_string.replace("\r\n", "\n")
+        new_string = new_string.replace("\r\n", "\n")
+    count = text.count(old_string)
     if count == 0:
         raise ToolError(f"old_string not found in {args.path}")
     if count > 1:
@@ -261,8 +271,10 @@ def _run_edit_file(workspace: Path, args: EditFileArgs) -> dict:
             f"old_string is not unique in {args.path} ({count} occurrences) -- "
             "include more surrounding context so it matches exactly once"
         )
-    new_text = text.replace(args.old_string, args.new_string, 1)
-    target.write_text(new_text, encoding="utf-8")
+    new_text = text.replace(old_string, new_string, 1)
+    if crlf:
+        new_text = new_text.replace("\n", "\r\n")
+    target.write_text(new_text, encoding="utf-8", newline="")
     return {"path": args.path, "replaced": 1}
 
 
@@ -295,13 +307,11 @@ def _read_lines(path: Path) -> list[str]:
         return ["<binary or non-UTF-8 file>\n"]
 
 
-def _run_get_diff(workspace: Path, baseline: Path | None) -> dict:
-    """Diff workspace vs `baseline` -- the snapshot taken when the workspace
-    was materialized (base + the bug's broken files), so the diff shows only
-    agent edits, never the injected bug itself. Cache/bytecode paths are
-    skipped exactly as scoring skips them."""
-    if baseline is None or not baseline.is_dir():
-        raise ToolError("get_diff is unavailable: no baseline snapshot for this workspace")
+def workspace_diff(workspace: Path, baseline: Path) -> tuple[list[str], str]:
+    """(changed_files, unified diff) of workspace vs `baseline` -- the
+    snapshot taken when the workspace was materialized (base + the bug's
+    broken files), so the diff shows only agent edits, never the injected bug
+    itself. Cache/bytecode paths are skipped exactly as scoring skips them."""
     before = _relative_file_set(baseline)
     after = _relative_file_set(workspace)
     chunks: list[str] = []
@@ -320,7 +330,13 @@ def _run_get_diff(workspace: Path, baseline: Path | None) -> dict:
                 tofile=f"b/{name}" if rel in after else "/dev/null",
             )
         )
-    diff = "".join(chunks)
+    return changed, "".join(chunks)
+
+
+def _run_get_diff(workspace: Path, baseline: Path | None) -> dict:
+    if baseline is None or not baseline.is_dir():
+        raise ToolError("get_diff is unavailable: no baseline snapshot for this workspace")
+    changed, diff = workspace_diff(workspace, baseline)
     truncated = len(diff) > MAX_READ_CHARS
     if truncated:
         diff = diff[:MAX_READ_CHARS]

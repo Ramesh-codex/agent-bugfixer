@@ -33,6 +33,15 @@ SUBPROCESS_TEST_TIMEOUT_S = 75  # outer watchdog, must exceed CONTAINER_TEST_TIM
 
 PRICING_PATH = ROOT / "config" / "pricing.json"
 
+# M4 approval gate + draft PRs (agent/proposals.py, agent/pr.py, agent/review.py).
+PROPOSALS_DB = ROOT / "reports" / "proposals.sqlite"
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")  # never log or print this
+GITHUB_REPO = os.environ.get("GITHUB_REPO")  # "owner/name"
+GITHUB_BASE_BRANCH = os.environ.get("GITHUB_BASE_BRANCH", "main")
+TARGET_REPO_PATH = os.environ.get("TARGET_REPO_PATH")  # local clone of GITHUB_REPO
+# Where the bug-zoo library lives inside that clone ("" = repo root).
+TARGET_REPO_SUBDIR = os.environ.get("TARGET_REPO_SUBDIR", "")
+
 
 def load_pricing() -> dict:
     return json.loads(PRICING_PATH.read_text(encoding="utf-8"))
