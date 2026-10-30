@@ -1,4 +1,4 @@
-{"event": "graph_start", "thread_id": "20261029_221250/BUG-009_rep3", "checkpoint_db": "D:\\Projects\\agent-bugfixer\\reports\\runs\\20261029_221250\\checkpoints.sqlite", "reviewer_version": "v2"}
+{"event": "graph_start", "thread_id": "20261029_221250/BUG-009_rep3", "checkpoint_db": "reports/runs/20261029_221250/checkpoints.sqlite", "reviewer_version": "v2"}
 {"event": "node_start", "agent": "researcher", "revision_count": 0}
 {"event": "model_response", "agent": "researcher", "turn": 1, "latency_s": 1.113, "input_tokens": 1874, "output_tokens": 116, "pricing_tier": "<=100k", "estimated_cost_usd": 0.000245, "stop_reason": "tool_use", "text": "I'll start by listing the workspace and searching for discount-related code.", "tool_calls": [{"id": "toolu_01CMTMkYrSj5iZFRRfxaSbwo", "name": "list_dir", "args": {"path": "."}}, {"id": "toolu_01JyLjX8Yhnxk7WTY8bCETMa", "name": "search", "args": {"query": "SAVE10"}}]}
 {"event": "tool_call", "agent": "researcher", "turn": 1, "tool": "list_dir", "args": {"path": "."}, "is_error": false, "result_size": 136, "latency_s": 0.001}

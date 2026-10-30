@@ -1,4 +1,4 @@
-{"event": "graph_start", "thread_id": "20261029_205326/BUG-002_rep1", "checkpoint_db": "D:\\Projects\\agent-bugfixer\\reports\\runs\\20261029_205326\\checkpoints.sqlite"}
+{"event": "graph_start", "thread_id": "20261029_205326/BUG-002_rep1", "checkpoint_db": "reports/runs/20261029_205326/checkpoints.sqlite"}
 {"event": "node_start", "agent": "researcher", "revision_count": 0}
 {"event": "model_response", "agent": "researcher", "turn": 1, "latency_s": 1.286, "input_tokens": 1872, "output_tokens": 108, "pricing_tier": "<=100k", "estimated_cost_usd": 0.000241, "stop_reason": "tool_use", "text": "I'll look at the discount code and its tests.", "tool_calls": [{"id": "toolu_01QP7BFNAbgpykLMfFRfAdvA", "name": "search", "args": {"query": "MIN50"}}, {"id": "toolu_015wneKiM3d7wFD4fHhM3UfX", "name": "list_dir", "args": {"path": "."}}]}
 {"event": "tool_call", "agent": "researcher", "turn": 1, "tool": "search", "args": {"query": "MIN50"}, "is_error": false, "result_size": 309, "latency_s": 0.011}

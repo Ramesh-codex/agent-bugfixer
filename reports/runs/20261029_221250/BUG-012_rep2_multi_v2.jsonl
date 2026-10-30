@@ -1,4 +1,4 @@
-{"event": "graph_start", "thread_id": "20261029_221250/BUG-012_rep2", "checkpoint_db": "D:\\Projects\\agent-bugfixer\\reports\\runs\\20261029_221250\\checkpoints.sqlite", "reviewer_version": "v2"}
+{"event": "graph_start", "thread_id": "20261029_221250/BUG-012_rep2", "checkpoint_db": "reports/runs/20261029_221250/checkpoints.sqlite", "reviewer_version": "v2"}
 {"event": "node_start", "agent": "researcher", "revision_count": 0}
 {"event": "model_response", "agent": "researcher", "turn": 1, "latency_s": 1.201, "input_tokens": 1851, "output_tokens": 134, "pricing_tier": "<=100k", "estimated_cost_usd": 0.000252, "stop_reason": "tool_use", "text": "I'll start by listing the workspace and searching for pagination code.", "tool_calls": [{"id": "toolu_015Hr4ang1zeXYBdo16jK1H2", "name": "search", "args": {"query": "page", "max_results": 100}}, {"id": "toolu_01YJ7bBZwRug5Nxm1AfhEySp", "name": "list_dir", "args": {"path": "."}}]}
 {"event": "tool_call", "agent": "researcher", "turn": 1, "tool": "search", "args": {"query": "page", "max_results": 100}, "is_error": false, "result_size": 3032, "latency_s": 0.02}

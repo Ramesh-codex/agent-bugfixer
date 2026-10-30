@@ -14,7 +14,7 @@ _real_subprocess_run = subprocess.run  # captured at import, before no_network p
 from agent import config, pr, review
 from agent.proposals import ProposalError, ProposalStore
 
-TOKEN = "ghp_SECRETtoken0123456789abcdefghijklmnop"
+TOKEN = "ghp_" + "x" * 36  # built at runtime so no file holds a token-shaped string
 DIFF = (
     "--- a/library/tax.py\n+++ b/library/tax.py\n@@ -1,2 +1,2 @@\n"
     " def add(a, b):\n-    return a - b\n+    return a + b\n"
@@ -177,6 +177,36 @@ def test_cli_approve_records_who(store, capsys):
     assert store.get(pid)["decided_by"] == "carol"
     review.main(["--db", str(store.path), "list"])
     assert "approved" in capsys.readouterr().out
+
+
+def test_cli_decider_defaults_to_git_user_name(store, monkeypatch):
+    pid = save(store)
+    monkeypatch.setattr(review, "git_user_name", lambda: "Dana Git")
+    assert review.main(["--db", str(store.path), "approve", str(pid)]) == 0
+    assert store.get(pid)["decided_by"] == "Dana Git"
+
+
+def test_cli_without_git_user_name_requires_by(store, monkeypatch, capsys):
+    pid = save(store)
+    monkeypatch.setattr(review, "git_user_name", lambda: None)
+    assert review.main(["--db", str(store.path), "reject", str(pid), "--reason", "nope"]) == 1
+    assert "--by" in capsys.readouterr().err
+    assert store.get(pid)["status"] == "pending"  # nothing recorded
+
+
+def test_git_user_name_reads_git_config(monkeypatch):
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, stdout="Erin Example\n", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert review.git_user_name() == "Erin Example"
+    assert calls == [["git", "config", "user.name"]]
+
+    monkeypatch.setattr(subprocess, "run", lambda args, **k: subprocess.CompletedProcess(args, 1, stdout="", stderr=""))
+    assert review.git_user_name() is None
 
 
 # --- the PR gate -------------------------------------------------------------

@@ -1,4 +1,4 @@
-{"event": "graph_start", "thread_id": "20261029_221250/BUG-013_rep2", "checkpoint_db": "D:\\Projects\\agent-bugfixer\\reports\\runs\\20261029_221250\\checkpoints.sqlite", "reviewer_version": "v2"}
+{"event": "graph_start", "thread_id": "20261029_221250/BUG-013_rep2", "checkpoint_db": "reports/runs/20261029_221250/checkpoints.sqlite", "reviewer_version": "v2"}
 {"event": "node_start", "agent": "researcher", "revision_count": 0}
 {"event": "model_response", "agent": "researcher", "turn": 1, "latency_s": 1.393, "input_tokens": 1822, "output_tokens": 163, "pricing_tier": "<=100k", "estimated_cost_usd": 0.000264, "stop_reason": "tool_use", "text": "I'll start by looking at the workspace layout and searching for the relevant total/tax logic.", "tool_calls": [{"id": "toolu_01EuCJvZ1Erp6EamFAvWruAg", "name": "list_dir", "args": {"path": "."}}, {"id": "toolu_01HU8kXbtjXPyjeWaeP4H5en", "name": "search", "args": {"query": "total"}}, {"id": "toolu_01KgKYqgZoY2uEgZQjyEci3r", "name": "search", "args": {"query": "tax"}}]}
 {"event": "tool_call", "agent": "researcher", "turn": 1, "tool": "list_dir", "args": {"path": "."}, "is_error": false, "result_size": 136, "latency_s": 0.001}

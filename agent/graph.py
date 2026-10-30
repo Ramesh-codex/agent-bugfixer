@@ -273,7 +273,7 @@ def run_multi_agent(
         if resume:
             reviewer_version = graph.get_state(cfg).values.get("reviewer_version", "v1")
         logger.log({"event": "graph_resume" if resume else "graph_start", "thread_id": thread_id,
-                    "checkpoint_db": str(checkpoint_path), "reviewer_version": reviewer_version})
+                    "checkpoint_db": config.repo_relative(checkpoint_path), "reviewer_version": reviewer_version})
         graph.invoke(None if resume else initial_state(thread_id, issue_text, reviewer_version), cfg)
         wall = time.monotonic() - start
         state = graph.get_state(cfg).values

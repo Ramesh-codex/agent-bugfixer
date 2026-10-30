@@ -10,6 +10,16 @@ ROOT = Path(__file__).resolve().parent.parent
 
 load_dotenv(ROOT / ".env")
 
+
+def repo_relative(path: Path) -> str:
+    """`path` relative to the repo root, POSIX form, for logs and printed output --
+    so they never record where the checkout lives. Paths outside the repo pass
+    through unchanged."""
+    try:
+        return Path(path).resolve().relative_to(ROOT).as_posix()
+    except ValueError:
+        return str(path)
+
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 AGENT_MODEL = os.environ.get("AGENT_MODEL", "claude-haiku-5-5")
 

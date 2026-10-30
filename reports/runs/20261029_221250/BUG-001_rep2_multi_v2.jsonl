@@ -1,4 +1,4 @@
-{"event": "graph_start", "thread_id": "20261029_221250/BUG-001_rep2", "checkpoint_db": "D:\\Projects\\agent-bugfixer\\reports\\runs\\20261029_221250\\checkpoints.sqlite", "reviewer_version": "v2"}
+{"event": "graph_start", "thread_id": "20261029_221250/BUG-001_rep2", "checkpoint_db": "reports/runs/20261029_221250/checkpoints.sqlite", "reviewer_version": "v2"}
 {"event": "node_start", "agent": "researcher", "revision_count": 0}
 {"event": "model_response", "agent": "researcher", "turn": 1, "latency_s": 1.302, "input_tokens": 1899, "output_tokens": 114, "pricing_tier": "<=100k", "estimated_cost_usd": 0.000247, "stop_reason": "tool_use", "text": "I'll start by looking at the workspace structure and the pagination code.", "tool_calls": [{"id": "toolu_019LXV1pkxNUbxRkkrbjQ8iD", "name": "list_dir", "args": {"path": "."}}, {"id": "toolu_01ERVdGbdsptSrsBh4Zf6Tyr", "name": "search", "args": {"query": "paginate"}}]}
 {"event": "tool_call", "agent": "researcher", "turn": 1, "tool": "list_dir", "args": {"path": "."}, "is_error": false, "result_size": 136, "latency_s": 0.001}

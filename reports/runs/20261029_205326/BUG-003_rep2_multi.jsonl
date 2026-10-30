@@ -1,4 +1,4 @@
-{"event": "graph_start", "thread_id": "20261029_205326/BUG-003_rep2", "checkpoint_db": "D:\\Projects\\agent-bugfixer\\reports\\runs\\20261029_205326\\checkpoints.sqlite"}
+{"event": "graph_start", "thread_id": "20261029_205326/BUG-003_rep2", "checkpoint_db": "reports/runs/20261029_205326/checkpoints.sqlite"}
 {"event": "node_start", "agent": "researcher", "revision_count": 0}
 {"event": "model_response", "agent": "researcher", "turn": 1, "latency_s": 0.902, "input_tokens": 1872, "output_tokens": 114, "pricing_tier": "<=100k", "estimated_cost_usd": 0.000244, "stop_reason": "tool_use", "text": "I'll start by listing the workspace and searching for the merging logic.", "tool_calls": [{"id": "toolu_015oNPEfZ1M7mkyaxeZvP8qF", "name": "search", "args": {"query": "same_day"}}, {"id": "toolu_01XBrgvjdPNWUy5pfrz4XAmP", "name": "list_dir", "args": {"path": "."}}]}
 {"event": "tool_call", "agent": "researcher", "turn": 1, "tool": "search", "args": {"query": "same_day"}, "is_error": false, "result_size": 56, "latency_s": 0.011}

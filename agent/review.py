@@ -8,17 +8,29 @@
 
 Proposals are created by `python -m agent.run --mode multi` when the
 Reviewer approves or escalates. Decisions are final and record who decided
-and when (--by defaults to the OS user name). `pr` refuses anything that is
-not approved.
+and when (--by defaults to `git config user.name`; with neither, the decision
+is refused). The name is written into the PR body, so it is never taken from
+the OS account. `pr` refuses anything that is not approved.
 """
 
 import argparse
-import getpass
+import subprocess
 import sys
 from pathlib import Path
 
 from agent import config, pr
 from agent.proposals import ProposalError, ProposalStore
+
+
+def git_user_name() -> str | None:
+    """`git config user.name` as seen from this repo, or None if unset or git is unavailable."""
+    try:
+        proc = subprocess.run(
+            ["git", "config", "user.name"], cwd=config.ROOT, capture_output=True, text=True, timeout=10
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return proc.stdout.strip() or None
 
 
 def _status(p: dict) -> str:
@@ -92,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
         sp.add_argument("id", type=int)
         if name in ("approve", "reject"):
             sp.add_argument("--reason", required=name == "reject")
-            sp.add_argument("--by", default=None, help="Who is deciding (default: OS user name)")
+            sp.add_argument("--by", default=None, help="Who is deciding (default: git config user.name)")
         if name == "pr":
             sp.add_argument("--dry-run", action="store_true", help="Print the plan; no git, no network")
     args = parser.parse_args(argv)
@@ -105,7 +117,10 @@ def main(argv: list[str] | None = None) -> int:
             cmd_show(store, args.id)
         elif args.cmd in ("approve", "reject"):
             status = "approved" if args.cmd == "approve" else "rejected"
-            p = store.decide(args.id, status, args.by or getpass.getuser(), args.reason)
+            decided_by = args.by or git_user_name()
+            if not decided_by:
+                raise ProposalError("git config user.name is not set; pass --by NAME to record who decided")
+            p = store.decide(args.id, status, decided_by, args.reason)
             print(f"Proposal {p['id']} {p['status']} by {p['decided_by']} at {p['decided_at']}.")
         elif args.cmd == "pr":
             settings = pr.PRSettings.from_config()

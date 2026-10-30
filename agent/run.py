@@ -330,8 +330,8 @@ def main() -> int:
 
         report_path = REPORTS_DIR / report_filename("baseline", args.mode, reviewer, model, run_id)
         report_path.write_text(json.dumps(rows, indent=2), encoding="utf-8")
-        print(f"\nWrote {report_path}")
-        print(f"Trajectory logs: {run_dir}")
+        print(f"\nWrote {config.repo_relative(report_path)}")
+        print(f"Trajectory logs: {config.repo_relative(run_dir)}")
         return 0
 
     per_bug, all_attempts = run_bugs_with_repeats(
@@ -361,8 +361,8 @@ def main() -> int:
         ),
         encoding="utf-8",
     )
-    print(f"\nWrote {report_path}")
-    print(f"Trajectory logs: {run_dir}")
+    print(f"\nWrote {config.repo_relative(report_path)}")
+    print(f"Trajectory logs: {config.repo_relative(run_dir)}")
 
     return 0
 

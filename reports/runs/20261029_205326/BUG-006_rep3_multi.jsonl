@@ -1,4 +1,4 @@
-{"event": "graph_start", "thread_id": "20261029_205326/BUG-006_rep3", "checkpoint_db": "D:\\Projects\\agent-bugfixer\\reports\\runs\\20261029_205326\\checkpoints.sqlite"}
+{"event": "graph_start", "thread_id": "20261029_205326/BUG-006_rep3", "checkpoint_db": "reports/runs/20261029_205326/checkpoints.sqlite"}
 {"event": "node_start", "agent": "researcher", "revision_count": 0}
 {"event": "model_response", "agent": "researcher", "turn": 1, "latency_s": 1.718, "input_tokens": 1819, "output_tokens": 88, "pricing_tier": "<=100k", "estimated_cost_usd": 0.000226, "stop_reason": "tool_use", "text": "I'll start by looking at the workspace layout.", "tool_calls": [{"id": "toolu_01AJFqqnog9fYmpk5JmpCkBz", "name": "list_dir", "args": {"path": "."}}, {"id": "toolu_011qKeFX3ZoYtkHGEm4ut572", "name": "run_tests", "args": {}}]}
 {"event": "tool_call", "agent": "researcher", "turn": 1, "tool": "list_dir", "args": {"path": "."}, "is_error": false, "result_size": 136, "latency_s": 0.0}

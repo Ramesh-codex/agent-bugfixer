@@ -1,14 +1,18 @@
 """Shared helper for invoking pytest inside the bugzoo-sandbox container."""
 
 import subprocess
+import sys
 from pathlib import Path
 
 from agent import config
 
 
-def to_mount_path(win_path: Path) -> str:
-    """Convert a Windows path to the //drive/... form Docker Desktop expects."""
-    resolved = str(win_path.resolve())
+def to_mount_path(host_path: Path) -> str:
+    """Host path in the form `docker run -v` expects: //drive/... for Docker
+    Desktop on Windows, the plain absolute path on Linux/macOS (e.g. CI)."""
+    resolved = str(host_path.resolve())
+    if sys.platform != "win32":
+        return resolved
     drive, rest = resolved.split(":", 1)
     rest = rest.replace("\\", "/")
     return f"//{drive.lower()}{rest}"

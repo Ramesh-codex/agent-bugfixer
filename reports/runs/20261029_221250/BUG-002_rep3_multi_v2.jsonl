@@ -1,4 +1,4 @@
-{"event": "graph_start", "thread_id": "20261029_221250/BUG-002_rep3", "checkpoint_db": "D:\\Projects\\agent-bugfixer\\reports\\runs\\20261029_221250\\checkpoints.sqlite", "reviewer_version": "v2"}
+{"event": "graph_start", "thread_id": "20261029_221250/BUG-002_rep3", "checkpoint_db": "reports/runs/20261029_221250/checkpoints.sqlite", "reviewer_version": "v2"}
 {"event": "node_start", "agent": "researcher", "revision_count": 0}
 {"event": "model_response", "agent": "researcher", "turn": 1, "latency_s": 1.121, "input_tokens": 1872, "output_tokens": 111, "pricing_tier": "<=100k", "estimated_cost_usd": 0.000243, "stop_reason": "tool_use", "text": "I'll look at the workspace to find the discount logic.", "tool_calls": [{"id": "toolu_01W3XmkP41g4Z6K5nT6tHu1D", "name": "search", "args": {"query": "MIN50"}}, {"id": "toolu_016VzxXBncRjBgaE36hpjyes", "name": "list_dir", "args": {"path": "."}}]}
 {"event": "tool_call", "agent": "researcher", "turn": 1, "tool": "search", "args": {"query": "MIN50"}, "is_error": false, "result_size": 309, "latency_s": 0.02}

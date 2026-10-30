@@ -1,4 +1,4 @@
-{"event": "graph_start", "thread_id": "20261029_201437/BUG-008", "checkpoint_db": "D:\\Projects\\agent-bugfixer\\reports\\runs\\20261029_201437\\checkpoints.sqlite"}
+{"event": "graph_start", "thread_id": "20261029_201437/BUG-008", "checkpoint_db": "reports/runs/20261029_201437/checkpoints.sqlite"}
 {"event": "node_start", "agent": "researcher", "revision_count": 0}
 {"event": "model_response", "agent": "researcher", "turn": 1, "latency_s": 1.39, "input_tokens": 1886, "output_tokens": 164, "pricing_tier": "<=100k", "estimated_cost_usd": 0.000271, "stop_reason": "tool_use", "text": "I'll start by listing the workspace and searching for timezone-related code.", "tool_calls": [{"id": "toolu_01ELh3DYKkAv5czbD7BjXVv6", "name": "list_dir", "args": {"path": "."}}, {"id": "toolu_015mnBkKFPLKVBpE8CQcfnby", "name": "search", "args": {"query": "America/Los_Angeles"}}, {"id": "toolu_01QRkM2Hv5PCLbLUXeeaKfYH", "name": "search", "args": {"query": "offset"}}]}
 {"event": "tool_call", "agent": "researcher", "turn": 1, "tool": "list_dir", "args": {"path": "."}, "is_error": false, "result_size": 136, "latency_s": 0.001}

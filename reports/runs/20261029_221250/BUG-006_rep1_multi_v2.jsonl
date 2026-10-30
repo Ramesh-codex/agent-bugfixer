@@ -1,4 +1,4 @@
-{"event": "graph_start", "thread_id": "20261029_221250/BUG-006_rep1", "checkpoint_db": "D:\\Projects\\agent-bugfixer\\reports\\runs\\20261029_221250\\checkpoints.sqlite", "reviewer_version": "v2"}
+{"event": "graph_start", "thread_id": "20261029_221250/BUG-006_rep1", "checkpoint_db": "reports/runs/20261029_221250/checkpoints.sqlite", "reviewer_version": "v2"}
 {"event": "node_start", "agent": "researcher", "revision_count": 0}
 {"event": "model_response", "agent": "researcher", "turn": 1, "latency_s": 1.135, "input_tokens": 1819, "output_tokens": 125, "pricing_tier": "<=100k", "estimated_cost_usd": 0.000244, "stop_reason": "tool_use", "text": "I'll start by exploring the workspace.", "tool_calls": [{"id": "toolu_01Q25bQGt6nS3jL1ZPiRCC9U", "name": "list_dir", "args": {"path": "."}}, {"id": "toolu_01XRMUC3MjJ79u36EdtYzn7W", "name": "search", "args": {"query": "import", "path": "."}}]}
 {"event": "tool_call", "agent": "researcher", "turn": 1, "tool": "list_dir", "args": {"path": "."}, "is_error": false, "result_size": 136, "latency_s": 0.001}

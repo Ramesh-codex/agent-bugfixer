@@ -1,4 +1,4 @@
-{"event": "graph_start", "thread_id": "20261029_221250/BUG-003_rep1", "checkpoint_db": "D:\\Projects\\agent-bugfixer\\reports\\runs\\20261029_221250\\checkpoints.sqlite", "reviewer_version": "v2"}
+{"event": "graph_start", "thread_id": "20261029_221250/BUG-003_rep1", "checkpoint_db": "reports/runs/20261029_221250/checkpoints.sqlite", "reviewer_version": "v2"}
 {"event": "node_start", "agent": "researcher", "revision_count": 0}
 {"event": "model_response", "agent": "researcher", "turn": 1, "latency_s": 0.919, "input_tokens": 1872, "output_tokens": 117, "pricing_tier": "<=100k", "estimated_cost_usd": 0.000246, "stop_reason": "tool_use", "text": "I'll start by looking at the workspace layout and searching for the merging logic.", "tool_calls": [{"id": "toolu_01DQPi2KPi8XzLMweQUsDvuQ", "name": "list_dir", "args": {"path": "."}}, {"id": "toolu_01RbiPf8in1uau2BDa8vSpZi", "name": "search", "args": {"query": "same_day"}}]}
 {"event": "tool_call", "agent": "researcher", "turn": 1, "tool": "list_dir", "args": {"path": "."}, "is_error": false, "result_size": 136, "latency_s": 0.001}

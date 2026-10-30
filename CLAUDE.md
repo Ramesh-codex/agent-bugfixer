@@ -9,7 +9,7 @@ Docker sandbox (no network, 512MB, 1 cpu, timeout).
 - **M2 Single-agent loop** ✓ — `agent/` tool loop + baseline measurement.
 - **M3 LangGraph Researcher/Coder/Reviewer** ✓ — `agent/graph.py`, `roles.py`, `handoffs.py`; `--mode multi`, `--reviewer v1|v2` (v2 default). Result: FINDINGS.md F10.
 - **M4 Approval gate + draft PR** — built: `agent/proposals.py` (SQLite `reports/proposals.sqlite`), `agent/review.py` (CLI), `agent/pr.py` (gate, git, GitHub REST). Offline-tested; no real PR opened yet (user does that).
-- **M5 Full eval + findings** — not started.
+- **M5 Portfolio packaging** — built: README.md, .env.example, LICENSE (MIT), `.github/workflows/ci.yml` (unit tests + verify_zoo, no secrets). Not pushed; screenshots in `docs/img/` pending.
 
 ## Layout
 - `bugzoo/base/` clean library + tests. `bugzoo/bugs/BUG-*/` broken files + issue.md + meta.json.
