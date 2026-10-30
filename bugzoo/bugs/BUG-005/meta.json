@@ -1,0 +1,6 @@
+{
+  "id": "BUG-005",
+  "category": "mutable-default-arg",
+  "difficulty": "medium",
+  "files_changed": ["library/discounts.py"]
+}

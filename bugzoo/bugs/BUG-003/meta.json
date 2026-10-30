@@ -1,0 +1,6 @@
+{
+  "id": "BUG-003",
+  "category": "wrong-operator",
+  "difficulty": "easy",
+  "files_changed": ["library/dates.py"]
+}

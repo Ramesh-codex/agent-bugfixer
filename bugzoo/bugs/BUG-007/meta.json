@@ -1,0 +1,6 @@
+{
+  "id": "BUG-007",
+  "category": "unicode",
+  "difficulty": "medium",
+  "files_changed": ["library/csv_import.py"]
+}

@@ -1,0 +1,6 @@
+{
+  "id": "BUG-013",
+  "category": "wrong-operator",
+  "difficulty": "easy",
+  "files_changed": ["library/tax.py"]
+}

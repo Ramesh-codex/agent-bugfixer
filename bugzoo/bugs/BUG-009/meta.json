@@ -1,0 +1,6 @@
+{
+  "id": "BUG-009",
+  "category": "state-leak",
+  "difficulty": "hard",
+  "files_changed": ["library/discounts.py"]
+}

@@ -1,0 +1,6 @@
+{
+  "id": "BUG-004",
+  "category": "rounding",
+  "difficulty": "medium",
+  "files_changed": ["library/tax.py"]
+}

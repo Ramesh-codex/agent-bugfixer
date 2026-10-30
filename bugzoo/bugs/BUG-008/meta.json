@@ -1,0 +1,6 @@
+{
+  "id": "BUG-008",
+  "category": "date-timezone",
+  "difficulty": "easy",
+  "files_changed": ["library/dates.py"]
+}

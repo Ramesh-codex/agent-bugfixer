@@ -1,0 +1,6 @@
+{
+  "id": "BUG-012",
+  "category": "boundary",
+  "difficulty": "easy",
+  "files_changed": ["library/pagination.py"]
+}

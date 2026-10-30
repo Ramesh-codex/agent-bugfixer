@@ -1,0 +1,6 @@
+{
+  "id": "BUG-002",
+  "category": "boundary",
+  "difficulty": "easy",
+  "files_changed": ["library/discounts.py"]
+}

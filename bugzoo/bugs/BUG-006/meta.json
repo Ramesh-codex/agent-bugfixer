@@ -1,0 +1,6 @@
+{
+  "id": "BUG-006",
+  "category": "exception-handling",
+  "difficulty": "hard",
+  "files_changed": ["library/csv_import.py"]
+}

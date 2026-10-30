@@ -1,0 +1,6 @@
+{
+  "id": "BUG-010",
+  "category": "multi-file",
+  "difficulty": "hard",
+  "files_changed": ["library/discounts.py", "library/pricing.py"]
+}
