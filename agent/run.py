@@ -165,7 +165,7 @@ def print_repeats_table(per_bug: list[dict]) -> None:
     multi = any("revisions_mean" in r for r in per_bug)
     headers = [
         "ID", "Fixed/N", "Fix Rate", "Tampered/N", "Injection/N",
-        "ToolCalls(mean/min/max)", "Mean Cost ($)", "Mean Wall(s)",
+        "ToolCalls(mean/min/max)", "Mean Cost ($)", "Mean Wall(s)", "Stop Reasons",
     ]
     if multi:
         headers += ["Mean Revisions", "Reviewer (final)", "Mean Cost R/C/Rv ($)"]
@@ -180,6 +180,7 @@ def print_repeats_table(per_bug: list[dict]) -> None:
                 f"{r['tool_calls_mean']:.2f}/{r['tool_calls_min']}/{r['tool_calls_max']}",
                 f"{r['cost_mean_usd']:.6f}",
                 f"{r['wall_time_mean_s']:.2f}",
+                aggregate.format_counts(r["stop_reasons"]),
             ]
         if multi:
             decisions = ", ".join(f"{k}:{v}" for k, v in sorted(r["reviewer_decisions"].items()))
@@ -196,6 +197,15 @@ def print_repeats_table(per_bug: list[dict]) -> None:
     print("  ".join("-" * w for w in widths))
     for row in table_rows:
         print(fmt(row))
+
+
+def print_overall(overall: dict, repeats: int) -> None:
+    print(
+        f"\nOverall: {overall['overall_fix_rate']:.2%} fix rate over "
+        f"{overall['total_attempts']} attempts ({overall['bugs']} bugs x {repeats} repeats). "
+        f"Total estimated cost: ${overall['total_estimated_cost_usd']:.6f}"
+    )
+    print(f"Stop reasons: {aggregate.format_counts(overall['stop_reasons'])}")
 
 
 def print_review_decisions(rows: list[dict]) -> None:
@@ -314,11 +324,7 @@ def main() -> int:
     print_repeats_table(per_bug)
     if args.mode == "multi":
         print_review_decisions(all_attempts)
-    print(
-        f"\nOverall: {overall['overall_fix_rate']:.2%} fix rate over "
-        f"{overall['total_attempts']} attempts ({overall['bugs']} bugs x {args.repeats} repeats). "
-        f"Total estimated cost: ${overall['total_estimated_cost_usd']:.6f}"
-    )
+    print_overall(overall, args.repeats)
 
     report_path = REPORTS_DIR / report_filename("repeats", args.mode, reviewer, model, run_id, args.repeats)
     report_path.write_text(

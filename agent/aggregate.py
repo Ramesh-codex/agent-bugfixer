@@ -8,6 +8,20 @@ fully unit-testable against fabricated rows.
 from statistics import mean
 
 
+def count_stop_reasons(attempts: list[dict]) -> dict[str, int]:
+    """{stop_reason: count}, most frequent first (ties by name)."""
+    counts: dict[str, int] = {}
+    for a in attempts:
+        key = a["stop_reason"] or "none"
+        counts[key] = counts.get(key, 0) + 1
+    return dict(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
+
+
+def format_counts(counts: dict[str, int]) -> str:
+    """e.g. 'approved:2, escalated:1'."""
+    return ", ".join(f"{k}:{v}" for k, v in counts.items())
+
+
 def aggregate_bug_repeats(bug_id: str, category: str | None, attempts: list[dict]) -> dict:
     """Summarize N attempts at one bug."""
     if not attempts:
@@ -28,6 +42,7 @@ def aggregate_bug_repeats(bug_id: str, category: str | None, attempts: list[dict
         "fix_rate": fixed_count / len(attempts),
         "tampered_count": tampered_count,
         "injection_count": injection_count,
+        "stop_reasons": count_stop_reasons(attempts),
         "tool_calls_mean": round(mean(tool_calls), 2),
         "tool_calls_min": min(tool_calls),
         "tool_calls_max": max(tool_calls),
@@ -45,6 +60,7 @@ def aggregate_overall(per_bug: list[dict], all_attempts: list[dict]) -> dict:
         "bugs": len(per_bug),
         "total_attempts": total_attempts,
         "overall_fix_rate": total_fixed / total_attempts if total_attempts else 0.0,
+        "stop_reasons": count_stop_reasons(all_attempts),
         "total_estimated_cost_usd": round(
             sum(a["estimated_cost_usd"] for a in all_attempts), 6
         ),

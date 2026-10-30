@@ -1,0 +1,78 @@
+[
+  {
+    "id": "BUG-010",
+    "mode": "multi",
+    "reviewer_version": "v2",
+    "category": "multi-file",
+    "fixed": true,
+    "stop_reason": "approved",
+    "stop_agent": "reviewer",
+    "revisions": 1,
+    "reviewer_decision": "approve",
+    "review_decisions": [
+      {
+        "decision": "request_changes",
+        "reasons": [
+          "The diff swaps the unpacking order in library/pricing.py (`discounted, applied_codes = apply_discounts(...)`). This correctly stops the list of code strings from reaching `total_with_tax`, and `test_calculate_order_total_applies_discount_then_tax` now passes.",
+          "The full suite still fails: `test_discounts_stack_in_order` (28 passed, 1 failed). The test expects `apply_discounts(100.0, discounts) == 85.0`, but the function returns a tuple `(85.0, ['SAVE10', 'FLAT5'])`. A failing test in the spec means this cannot be approved.",
+          "The Coder left this failure in place, arguing the tuple contract should win. The spec disagrees, so the library needs to change to satisfy it, not the test.",
+          "Non-blocking: the issue is about discounts crashing order totals and does not mention the return shape of `apply_discounts`, so the tuple-vs-float question is an internal API decision the issue does not settle."
+        ],
+        "required_changes": [
+          "Make `apply_discounts` return a bare discounted float so that `test_discounts_stack_in_order` passes. Move the applied-codes computation into library/pricing.py (or a separate helper) so that `calculate_order_total` still gets both values it needs without the unpacking mismatch.",
+          "Keep the total-with-tax path in library/pricing.py working so that `test_calculate_order_total_applies_discount_then_tax` still passes, and confirm the full suite is green before resubmitting."
+        ]
+      },
+      {
+        "decision": "approve",
+        "reasons": [
+          "Full test suite passes (29 passed), including test_calculate_order_total_applies_discount_then_tax and test_discounts_stack_in_order.",
+          "Root cause addressed: calculate_order_total no longer receives a list of code strings where a numeric amount is expected, so Decimal(str(...)) no longer raises InvalidOperation for any applied discount.",
+          "Diff is minimal and confined to library/discounts.py and library/pricing.py; no test files modified.",
+          "Non-blocking: apply_discounts changed its return contract from (total, codes) to a bare float. That matches the test but breaks the old docstring contract; any external caller relying on the tuple would break. Within this workspace nothing else depends on it.",
+          "Non-blocking: the issue report says any discount code triggers the 500, and the fix addresses that generically; the new applied_discount_codes helper is currently unused by the library and is only retained for future receipt/reporting use."
+        ],
+        "required_changes": []
+      }
+    ],
+    "tool_calls": 25,
+    "input_tokens": 69742,
+    "output_tokens": 5716,
+    "estimated_cost_usd": 0.009832,
+    "cost_by_agent_usd": {
+      "researcher": 0.002348,
+      "coder": 0.004511,
+      "reviewer": 0.002973
+    },
+    "per_agent": {
+      "researcher": {
+        "input_tokens": 15494,
+        "output_tokens": 1597,
+        "estimated_cost_usd": 0.002348,
+        "tool_calls": 7,
+        "rejected_calls": 0,
+        "invocations": 1
+      },
+      "coder": {
+        "input_tokens": 33186,
+        "output_tokens": 2384,
+        "estimated_cost_usd": 0.004511,
+        "tool_calls": 11,
+        "rejected_calls": 0,
+        "invocations": 2
+      },
+      "reviewer": {
+        "input_tokens": 21062,
+        "output_tokens": 1735,
+        "estimated_cost_usd": 0.002973,
+        "tool_calls": 7,
+        "rejected_calls": 0,
+        "invocations": 2
+      }
+    },
+    "wall_time_s": 40.13,
+    "tests_tampered": false,
+    "injection_flag": false,
+    "thread_id": "20261029_220920/BUG-010"
+  }
+]

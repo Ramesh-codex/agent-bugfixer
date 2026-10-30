@@ -2,9 +2,10 @@
 sections from its already-recorded `attempts` -- no live run, no sandbox, no
 API calls. Useful after `agent/aggregate.py`'s schema changes (e.g. new
 fields) so an old report can be brought up to date without re-running the
-agent.
+agent. Multi-agent reports (`"mode": "multi"`) also get the multi-only
+per-bug fields, exactly as a live `--mode multi --repeats` run computes them.
 
-    python scripts/regenerate_repeats_aggregate.py reports/repeats_<model>_<N>x_<run_id>.json
+    python -m scripts.regenerate_repeats_aggregate reports/repeats_<mode>_..._<N>x_<run_id>.json
 """
 
 import json
@@ -12,7 +13,7 @@ import sys
 from pathlib import Path
 
 from agent import aggregate
-from agent.run import print_repeats_table
+from agent.run import print_overall, print_repeats_table
 
 
 def regenerate(path: Path) -> dict:
@@ -28,10 +29,12 @@ def regenerate(path: Path) -> dict:
             order.append(bug_id)
         by_bug[bug_id].append(attempt)
 
-    per_bug = [
-        aggregate.aggregate_bug_repeats(bug_id, by_bug[bug_id][0].get("category"), by_bug[bug_id])
-        for bug_id in order
-    ]
+    per_bug = []
+    for bug_id in order:
+        summary = aggregate.aggregate_bug_repeats(bug_id, by_bug[bug_id][0].get("category"), by_bug[bug_id])
+        if data.get("mode") == "multi":
+            summary.update(aggregate.aggregate_multi_extras(by_bug[bug_id]))
+        per_bug.append(summary)
     overall = aggregate.aggregate_overall(per_bug, attempts)
 
     data["per_bug"] = per_bug
@@ -41,19 +44,14 @@ def regenerate(path: Path) -> dict:
 
 def main() -> int:
     if len(sys.argv) != 2:
-        print("usage: python scripts/regenerate_repeats_aggregate.py <repeats_report.json>", file=sys.stderr)
+        print("usage: python -m scripts.regenerate_repeats_aggregate <repeats_report.json>", file=sys.stderr)
         return 1
 
     path = Path(sys.argv[1])
     data = regenerate(path)
 
     print_repeats_table(data["per_bug"])
-    overall = data["overall"]
-    print(
-        f"\nOverall: {overall['overall_fix_rate']:.2%} fix rate over "
-        f"{overall['total_attempts']} attempts ({overall['bugs']} bugs x {data['repeats']} repeats). "
-        f"Total estimated cost: ${overall['total_estimated_cost_usd']:.6f}"
-    )
+    print_overall(data["overall"], data["repeats"])
 
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
     print(f"\nRegenerated {path}")
