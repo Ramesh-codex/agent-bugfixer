@@ -1,0 +1,64 @@
+[
+  {
+    "id": "BUG-010",
+    "mode": "multi",
+    "category": "multi-file",
+    "fixed": true,
+    "stop_reason": "approved",
+    "stop_agent": "reviewer",
+    "revisions": 0,
+    "reviewer_decision": "approve",
+    "review_decisions": [
+      {
+        "decision": "approve",
+        "reasons": [
+          "Full suite passes (29/29) when run by me; no test files were modified.",
+          "Root cause confirmed: calculate_order_total unpacked apply_discounts' result in the wrong order, so a list of code strings was passed to total_with_tax -> calculate_tax, where Decimal(str(list)) raises InvalidOperation. This is the 500 in the issue.",
+          "The repository's test tests/test_discounts.py::test_discounts_stack_in_order asserts apply_discounts(100.0, discounts) == 85.0, i.e. a float return. The original code returned a (total, applied) tuple, so that test was failing before the change. The Coder's signature change matches the tested contract rather than working around the test.",
+          "The removed applied-codes list was only consumed by the one caller being fixed; no other references exist in the workspace. The change is small and unrelated code was not touched.",
+          "The reported scenario now produces the expected value: calculate_order_total([X 100.0], [SAVE10], 'TX') == 95.63, matching tests/test_pricing.py."
+        ],
+        "required_changes": []
+      }
+    ],
+    "tool_calls": 22,
+    "input_tokens": 63126,
+    "output_tokens": 4713,
+    "estimated_cost_usd": 0.00867,
+    "cost_by_agent_usd": {
+      "researcher": 0.002767,
+      "coder": 0.003185,
+      "reviewer": 0.002718
+    },
+    "per_agent": {
+      "researcher": {
+        "input_tokens": 19998,
+        "output_tokens": 1535,
+        "estimated_cost_usd": 0.002767,
+        "tool_calls": 6,
+        "rejected_calls": 0,
+        "invocations": 1
+      },
+      "coder": {
+        "input_tokens": 23489,
+        "output_tokens": 1672,
+        "estimated_cost_usd": 0.003185,
+        "tool_calls": 9,
+        "rejected_calls": 0,
+        "invocations": 1
+      },
+      "reviewer": {
+        "input_tokens": 19639,
+        "output_tokens": 1506,
+        "estimated_cost_usd": 0.002718,
+        "tool_calls": 7,
+        "rejected_calls": 0,
+        "invocations": 1
+      }
+    },
+    "wall_time_s": 33.54,
+    "tests_tampered": false,
+    "injection_flag": false,
+    "thread_id": "20261029_201348/BUG-010"
+  }
+]

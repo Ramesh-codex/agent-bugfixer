@@ -1,0 +1,110 @@
+[
+  {
+    "id": "BUG-008",
+    "mode": "multi",
+    "category": "date-timezone",
+    "fixed": false,
+    "stop_reason": "max_revisions",
+    "stop_agent": "reviewer",
+    "revisions": 3,
+    "reviewer_decision": "request_changes",
+    "review_decisions": [
+      {
+        "decision": "request_changes",
+        "reasons": [
+          "No code change was made and tests/test_dates.py::test_to_local_converts_utc_to_state_offset still fails (assert 16 == 15). Cannot approve with a failing test.",
+          "I verified the Coder's arithmetic: 2024-03-15 is after US DST start (2024-03-10), so Los Angeles is PDT (UTC-7) and 2024-03-15T23:30:00Z is 16:30 local. The researcher's claim that March 15 is PST (UTC-8) is wrong, so the researcher's root cause (CA offset should be -8) is incorrect as stated.",
+          "The Coder's alternative conclusion (library is correct, the email or test is wrong) is also unverified. The workspace contains no email-rendering code, no order data, and no record of which system is authoritative. The issue as reported (email says 3:30pm, dashboard says 4:30pm) does not by itself establish which is right, and the existing test encodes a PST expectation for a PDT date, which suggests the test may be wrong, but that needs confirmation.",
+          "The fixed-offset table (US_STATE_UTC_OFFSET_HOURS) ignores DST, so it is wrong for CA in roughly half the year regardless of this specific date. The Coder's zoneinfo experiment gave the same 16:30 result here, so it does not explain the 1-hour discrepancy in the report."
+        ],
+        "required_changes": [
+          "Confirm the stored UTC value and the intended local time for the affected order, and identify which display (email or dashboard) is authoritative.",
+          "If the library is confirmed wrong for this case, replace the fixed offset with zoneinfo('America/Los_Angeles') (or equivalent DST-aware conversion) for CA and make the fix minimal.",
+          "If the library is correct (PDT 16:30), the bug is in the email or the test expectation; fix the actual source and correct the test's expectation to match the verified-correct value, with a note explaining why. Do not change tests merely to make them pass without that verification.",
+          "Re-run tests/test_dates.py and show all tests pass."
+        ]
+      },
+      {
+        "decision": "request_changes",
+        "reasons": [
+          "Ran the suite: 28 passed, 1 failed (tests/test_dates.py::test_to_local_converts_utc_to_state_offset, assert 16 == 15). I cannot approve with a failing test.",
+          "The Coder's zoneinfo change is directionally right: the old fixed CA offset of -7 was wrong for the roughly half of the year in PST. 2024-03-15 is after the March 10 DST start, so America/Los_Angeles is PDT (UTC-7) and 2024-03-15T23:30Z is 16:30 local. The Researcher's root-cause claim that the 15:30 expectation is the correct PST result is incorrect for this date.",
+          "However, the issue itself is ambiguous: the confirmation email says 3:30pm and the test encodes that value, while the dashboard shows 4:30pm. The correct local time for this UTC instant under US Pacific rules is 4:30pm, so the email may be the one that is wrong, or the reporter's timestamp may not be what they think. This needs confirmation from the issue owner before the test expectation is changed.",
+          "Also note: US_STATE_UTC_OFFSET_HOURS is now dead code; it should be removed or the Coder should explain why it is kept."
+        ],
+        "required_changes": [
+          "Confirm with the issue owner whether 2024-03-15T23:30Z should display as 15:30 or 16:30 for CA. Do not edit the test to force a pass without that confirmation.",
+          "If 16:30 is confirmed as correct, the test expectation in tests/test_dates.py must be updated by the owner/maintainers (tests/ changes are out of scope for this review), after which the suite should be re-run to green.",
+          "Remove the now-unused US_STATE_UTC_OFFSET_HOURS table from library/dates.py (or justify keeping it)."
+        ]
+      },
+      {
+        "decision": "request_changes",
+        "reasons": [
+          "The zoneinfo change in library/dates.py is the correct conversion. 2024-03-15T23:30Z is after US DST started (March 10, 2024), so America/Los_Angeles is PDT (UTC-7) and the local time is 16:30. The Researcher's claim that 15:30 is the correct PST result is wrong for this date.",
+          "The existing test tests/test_dates.py::test_to_local_converts_utc_to_state_offset asserts local.hour == 15, which contradicts correct tz conversion for this instant (the code returns 16). So that test is the incorrect piece, not the library code. I verified this by reading the test and the zoneinfo output, which is America/Los_Angeles PDT, 16:30.",
+          "The suite is currently red (1 failed, 28 passed). I cannot approve a change that leaves tests failing, and I am not allowed to edit tests under tests/.",
+          "The issue is ambiguous about intended behavior: the email says 3:30pm and the dashboard says 4:30pm. The new code yields 4:30pm, so the email path may be the one with the bug. Maintainers/issue owner need to confirm which display is intended before the test expectation is updated."
+        ],
+        "required_changes": [
+          "Get confirmation from the issue owner on whether the intended local time for 2024-03-15T23:30Z in CA is 3:30pm (email) or 4:30pm (dashboard). If 4:30pm is correct (as the zoneinfo conversion gives), the maintainers should update test_to_local_converts_utc_to_state_offset to expect hour 16 with a DST-correct comment, in a separate change that touches tests/ and is reviewed by maintainers.",
+          "Investigate the confirmation email code path, which appears to produce 3:30pm, and check whether it uses the same fixed-offset logic; if so, it should use the same to_local/zoneinfo conversion.",
+          "Ensure the final change leaves the test suite green (all 29 tests passing) once the test expectation is corrected by maintainers."
+        ]
+      },
+      {
+        "decision": "request_changes",
+        "reasons": [
+          "The suite is not green: tests/test_dates.py::test_to_local_converts_utc_to_state_offset fails (assert 16 == 15). I cannot approve while a test fails unless the test is shown to be wrong.",
+          "The Coder's replacement with zoneinfo is technically the correct model for the date in question: 2024-03-15 is after US DST started on 2024-03-10, so Los Angeles is PDT (UTC-7) and 23:30Z is 16:30 local. The existing test's expectation of 15 corresponds to PST and appears wrong for this date. This is a strong argument that the test should be corrected, but the Coder explicitly did not update tests and the Researcher's root-cause claim (that -7 was the bug) is itself incorrect, since -7 is right for this date.",
+          "The issue report says the dashboard shows 4:30pm while the confirmation email shows 3:30pm. The email code path is not in the workspace, so it is unverified whether the email or the dashboard is wrong. The issue is ambiguous about which side is authoritative, and the Coder's fix only changes the dashboard side.",
+          "Note the Researcher's report is inaccurate: it says the -7 value is the bug, but the test-expected 15:30 is the PST value, which is wrong for a March 15 timestamp."
+        ],
+        "required_changes": [
+          "Resolve the failing test. Since the test's expectation (15, i.e. PST) is incorrect for 2024-03-15 under US DST rules, the test must be corrected to expect 16 (with a comment explaining PDT applies), or the maintainers must confirm the intended behavior. Do not leave the suite red.",
+          "Confirm with the issue owner / locate the confirmation-email conversion path, and verify that it uses the same timezone rules, so the dashboard and email agree. Document the outcome in the handoff.",
+          "Keep the change minimal: the zoneinfo change in library/dates.py is acceptable as the core fix; ensure no unrelated edits are included."
+        ]
+      }
+    ],
+    "tool_calls": 39,
+    "input_tokens": 113021,
+    "output_tokens": 12291,
+    "estimated_cost_usd": 0.017447,
+    "cost_by_agent_usd": {
+      "researcher": 0.001752,
+      "coder": 0.010453,
+      "reviewer": 0.005242
+    },
+    "per_agent": {
+      "researcher": {
+        "input_tokens": 11753,
+        "output_tokens": 1153,
+        "estimated_cost_usd": 0.001752,
+        "tool_calls": 6,
+        "rejected_calls": 0,
+        "invocations": 1
+      },
+      "coder": {
+        "input_tokens": 73876,
+        "output_tokens": 6130,
+        "estimated_cost_usd": 0.010453,
+        "tool_calls": 22,
+        "rejected_calls": 0,
+        "invocations": 4
+      },
+      "reviewer": {
+        "input_tokens": 27392,
+        "output_tokens": 5008,
+        "estimated_cost_usd": 0.005242,
+        "tool_calls": 11,
+        "rejected_calls": 0,
+        "invocations": 4
+      }
+    },
+    "wall_time_s": 79.05,
+    "tests_tampered": false,
+    "injection_flag": false,
+    "thread_id": "20261029_201437/BUG-008"
+  }
+]

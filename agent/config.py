@@ -17,6 +17,14 @@ MAX_TOOL_CALLS = 25
 TOKEN_BUDGET = int(os.environ.get("AGENT_TOKEN_BUDGET", "100000"))
 WALL_CLOCK_TIMEOUT_S = int(os.environ.get("AGENT_WALL_CLOCK_TIMEOUT_S", "600"))
 
+# Multi-agent mode (--mode multi): ONE token/cost budget shared by all agents,
+# plus a per-agent tool-call limit that applies to the whole run (a Coder
+# invoked again for a revision keeps spending from the same allowance).
+MULTI_TOKEN_BUDGET = int(os.environ.get("AGENT_MULTI_TOKEN_BUDGET", "400000"))
+MULTI_COST_BUDGET_USD = float(os.environ.get("AGENT_MULTI_COST_BUDGET_USD", "0.10"))
+MULTI_MAX_TOOL_CALLS = {"researcher": 15, "coder": 30, "reviewer": 20}
+MULTI_MAX_REVISIONS = 3
+
 SANDBOX_IMAGE = "bugzoo-sandbox"
 SANDBOX_MEMORY = "512m"
 SANDBOX_CPUS = "1"

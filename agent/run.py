@@ -1,7 +1,7 @@
-"""CLI for Milestone 2: single-agent tool loop + baseline measurement.
+"""CLI: run the bug-fixing agent against the bug zoo and score it.
 
-    python -m agent.run --bug BUG-001
-    python -m agent.run --all
+    python -m agent.run --bug BUG-001                 # single agent (M2 loop)
+    python -m agent.run --mode multi --bug BUG-001    # Researcher -> Coder -> Reviewer (M3)
     python -m agent.run --all --repeats 3
 """
 
@@ -12,8 +12,10 @@ import time
 from pathlib import Path
 
 from agent import aggregate, config, sandbox, scoring
+from agent.graph import run_multi_agent
 from agent.loop import LoopLimits, run_agent_loop
 from agent.logging_utils import TrajectoryLogger
+from agent.roles import AnthropicModelClient
 from agent.workspace import materialize_workspace
 
 BUGS_DIR = config.ROOT / "bugzoo" / "bugs"
@@ -36,6 +38,7 @@ def run_one_bug(
     workspaces_root: Path,
     model: str,
     repeat_index: int | None = None,
+    mode: str = "single",
 ) -> dict:
     bug_dir = BUGS_DIR / bug_id
     meta = _load_meta(bug_dir)
@@ -44,8 +47,11 @@ def run_one_bug(
     workspace = workspaces_root / bug_id
     materialize_workspace(workspace, bug_dir / "files")
 
-    log_name = f"{bug_id}.jsonl" if repeat_index is None else f"{bug_id}_rep{repeat_index}.jsonl"
-    logger = TrajectoryLogger(run_dir / log_name)
+    stem = bug_id if repeat_index is None else f"{bug_id}_rep{repeat_index}"
+    if mode == "multi":
+        return _run_one_bug_multi(bug_id, meta, issue_text, workspace, run_dir, workspaces_root, model, stem)
+
+    logger = TrajectoryLogger(run_dir / f"{stem}.jsonl")
     try:
         result = run_agent_loop(issue_text, workspace, model, logger, LoopLimits())
     finally:
@@ -68,21 +74,74 @@ def run_one_bug(
     }
 
 
+def _run_one_bug_multi(
+    bug_id: str, meta: dict, issue_text: str, workspace: Path, run_dir: Path,
+    workspaces_root: Path, model: str, stem: str,
+) -> dict:
+    # Pristine snapshot of the starting workspace (base + broken files) for
+    # the Reviewer's get_diff -- outside the workspace, so no agent can edit it.
+    baseline = workspaces_root / "_baseline" / stem
+    materialize_workspace(baseline, BUGS_DIR / bug_id / "files")
+
+    thread_id = f"{run_dir.name}/{stem}"
+    logger = TrajectoryLogger(run_dir / f"{stem}_multi.jsonl")
+    try:
+        result = run_multi_agent(
+            issue_text, workspace, baseline, AnthropicModelClient(model), logger,
+            checkpoint_path=run_dir / "checkpoints.sqlite", thread_id=thread_id,
+        )
+    finally:
+        logger.close()
+
+    # Same scoring as single mode, only after the graph has ended.
+    score = scoring.score_run(workspace)
+
+    return {
+        "id": bug_id,
+        "mode": "multi",
+        "category": meta.get("category"),
+        "fixed": score["fixed"],
+        "stop_reason": result.stop_reason,
+        "stop_agent": result.stop_agent,
+        "revisions": result.revisions,
+        "reviewer_decision": result.reviewer_decision,
+        "review_decisions": result.review_decisions,
+        "tool_calls": result.tool_calls,
+        "input_tokens": result.input_tokens,
+        "output_tokens": result.output_tokens,
+        "estimated_cost_usd": result.estimated_cost_usd,
+        "cost_by_agent_usd": {a: u["estimated_cost_usd"] for a, u in result.usage.items()},
+        "per_agent": result.usage,
+        "wall_time_s": round(result.wall_time_s, 2),
+        "tests_tampered": score["tests_tampered"],
+        "injection_flag": result.injection_flag,
+        "thread_id": thread_id,
+    }
+
+
+def _cost_split(costs: dict) -> str:
+    return f"{costs['researcher']:.6f}/{costs['coder']:.6f}/{costs['reviewer']:.6f}"
+
+
 def print_table(rows: list[dict]) -> None:
+    multi = any(r.get("mode") == "multi" for r in rows)
     headers = [
         "ID", "Fixed", "Stop Reason", "Tool Calls", "In Tok", "Out Tok",
         "Est. Cost ($)", "Wall(s)", "Tampered", "Injection",
     ]
+    if multi:
+        headers += ["Revisions", "Reviewer", "Cost R/C/Rv ($)"]
     table_rows = []
     for r in rows:
-        table_rows.append(
-            [
-                r["id"], str(r["fixed"]), r["stop_reason"], str(r["tool_calls"]),
-                str(r["input_tokens"]), str(r["output_tokens"]),
-                f"{r['estimated_cost_usd']:.6f}", f"{r['wall_time_s']:.2f}",
-                str(r["tests_tampered"]), str(r["injection_flag"]),
-            ]
-        )
+        cols = [
+            r["id"], str(r["fixed"]), r["stop_reason"], str(r["tool_calls"]),
+            str(r["input_tokens"]), str(r["output_tokens"]),
+            f"{r['estimated_cost_usd']:.6f}", f"{r['wall_time_s']:.2f}",
+            str(r["tests_tampered"]), str(r["injection_flag"]),
+        ]
+        if multi:
+            cols += [str(r["revisions"]), str(r["reviewer_decision"]), _cost_split(r["cost_by_agent_usd"])]
+        table_rows.append(cols)
     widths = [max(len(h), *(len(row[i]) for row in table_rows)) for i, h in enumerate(headers)]
 
     def fmt(cols: list[str]) -> str:
@@ -97,14 +156,16 @@ def print_table(rows: list[dict]) -> None:
 
 
 def print_repeats_table(per_bug: list[dict]) -> None:
+    multi = any("revisions_mean" in r for r in per_bug)
     headers = [
         "ID", "Fixed/N", "Fix Rate", "Tampered/N", "Injection/N",
         "ToolCalls(mean/min/max)", "Mean Cost ($)", "Mean Wall(s)",
     ]
+    if multi:
+        headers += ["Mean Revisions", "Reviewer (final)", "Mean Cost R/C/Rv ($)"]
     table_rows = []
     for r in per_bug:
-        table_rows.append(
-            [
+        cols = [
                 r["id"],
                 f"{r['fixed_count']}/{r['repeats']}",
                 f"{r['fix_rate']:.2f}",
@@ -114,7 +175,10 @@ def print_repeats_table(per_bug: list[dict]) -> None:
                 f"{r['cost_mean_usd']:.6f}",
                 f"{r['wall_time_mean_s']:.2f}",
             ]
-        )
+        if multi:
+            decisions = ", ".join(f"{k}:{v}" for k, v in sorted(r["reviewer_decisions"].items()))
+            cols += [f"{r['revisions_mean']:.2f}", decisions, _cost_split(r["cost_by_agent_mean_usd"])]
+        table_rows.append(cols)
     widths = [max(len(h), *(len(row[i]) for row in table_rows)) for i, h in enumerate(headers)]
 
     def fmt(cols: list[str]) -> str:
@@ -128,8 +192,20 @@ def print_repeats_table(per_bug: list[dict]) -> None:
         print(fmt(row))
 
 
+def print_review_decisions(rows: list[dict]) -> None:
+    for r in rows:
+        print(f"\n{r['id']} reviewer decisions ({len(r['review_decisions'])}):")
+        for i, d in enumerate(r["review_decisions"], start=1):
+            print(f"  {i}. {d['decision']}")
+            for reason in d["reasons"]:
+                print(f"     reason: {reason}")
+            for change in d["required_changes"]:
+                print(f"     required: {change}")
+
+
 def run_bugs_with_repeats(
-    bug_ids: list[str], run_dir: Path, workspaces_root: Path, model: str, repeats: int
+    bug_ids: list[str], run_dir: Path, workspaces_root: Path, model: str, repeats: int,
+    mode: str = "single",
 ) -> tuple[list[dict], list[dict]]:
     """Run every bug in `bug_ids` `repeats` times. Returns (per_bug_summaries, all_attempts)."""
     per_bug = []
@@ -138,9 +214,12 @@ def run_bugs_with_repeats(
         attempts = []
         for rep in range(1, repeats + 1):
             print(f"Running {bug_id} (repeat {rep}/{repeats})...")
-            row = run_one_bug(bug_id, run_dir, workspaces_root, model, repeat_index=rep)
+            row = run_one_bug(bug_id, run_dir, workspaces_root, model, repeat_index=rep, mode=mode)
             attempts.append(row)
-        per_bug.append(aggregate.aggregate_bug_repeats(bug_id, attempts[0].get("category"), attempts))
+        summary = aggregate.aggregate_bug_repeats(bug_id, attempts[0].get("category"), attempts)
+        if mode == "multi":
+            summary.update(aggregate.aggregate_multi_extras(attempts))
+        per_bug.append(summary)
         all_attempts.extend(attempts)
     return per_bug, all_attempts
 
@@ -150,6 +229,10 @@ def main() -> int:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--bug", help="Run a single bug, e.g. BUG-001")
     group.add_argument("--all", action="store_true", help="Run every bug in bugzoo/bugs")
+    parser.add_argument(
+        "--mode", choices=["single", "multi"], default="single",
+        help="single: the M2 tool loop. multi: Researcher -> Coder -> Reviewer LangGraph.",
+    )
     parser.add_argument(
         "--repeats", type=int, default=1,
         help="Run each selected bug this many times and write one combined, aggregated report.",
@@ -171,7 +254,7 @@ def main() -> int:
     run_dir.mkdir(parents=True, exist_ok=True)
     workspaces_root.mkdir(parents=True, exist_ok=True)
 
-    print(f"Model: {model}")
+    print(f"Model: {model}  Mode: {args.mode}")
     print("Warming up sandbox container...")
     sandbox.warm_up()
 
@@ -184,31 +267,39 @@ def main() -> int:
         rows = []
         for bug_id in bug_ids:
             print(f"Running {bug_id}...")
-            row = run_one_bug(bug_id, run_dir, workspaces_root, model)
+            row = run_one_bug(bug_id, run_dir, workspaces_root, model, mode=args.mode)
             rows.append(row)
 
         print_table(rows)
+        if args.mode == "multi":
+            print_review_decisions(rows)
+            print(f"\nTotal estimated cost: ${sum(r['estimated_cost_usd'] for r in rows):.6f}")
 
-        report_path = REPORTS_DIR / f"baseline_{model}_{run_id}.json"
+        report_path = REPORTS_DIR / f"baseline_{args.mode}_{model}_{run_id}.json"
         report_path.write_text(json.dumps(rows, indent=2), encoding="utf-8")
         print(f"\nWrote {report_path}")
         print(f"Trajectory logs: {run_dir}")
         return 0
 
-    per_bug, all_attempts = run_bugs_with_repeats(bug_ids, run_dir, workspaces_root, model, args.repeats)
+    per_bug, all_attempts = run_bugs_with_repeats(
+        bug_ids, run_dir, workspaces_root, model, args.repeats, mode=args.mode
+    )
     overall = aggregate.aggregate_overall(per_bug, all_attempts)
 
     print_repeats_table(per_bug)
+    if args.mode == "multi":
+        print_review_decisions(all_attempts)
     print(
         f"\nOverall: {overall['overall_fix_rate']:.2%} fix rate over "
         f"{overall['total_attempts']} attempts ({overall['bugs']} bugs x {args.repeats} repeats). "
         f"Total estimated cost: ${overall['total_estimated_cost_usd']:.6f}"
     )
 
-    report_path = REPORTS_DIR / f"repeats_{model}_{args.repeats}x_{run_id}.json"
+    report_path = REPORTS_DIR / f"repeats_{args.mode}_{model}_{args.repeats}x_{run_id}.json"
     report_path.write_text(
         json.dumps(
             {
+                "mode": args.mode,
                 "model": model,
                 "run_id": run_id,
                 "repeats": args.repeats,

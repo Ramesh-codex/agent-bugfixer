@@ -49,3 +49,20 @@ def aggregate_overall(per_bug: list[dict], all_attempts: list[dict]) -> dict:
             sum(a["estimated_cost_usd"] for a in all_attempts), 6
         ),
     }
+
+
+def aggregate_multi_extras(attempts: list[dict]) -> dict:
+    """Multi-agent-only fields for one bug's repeats: revisions, the
+    Reviewer's final decision counts, and mean cost per agent."""
+    decisions: dict[str, int] = {}
+    for a in attempts:
+        key = a["reviewer_decision"] or "none"
+        decisions[key] = decisions.get(key, 0) + 1
+    agents = attempts[0]["cost_by_agent_usd"].keys()
+    return {
+        "revisions_mean": round(mean(a["revisions"] for a in attempts), 2),
+        "reviewer_decisions": decisions,
+        "cost_by_agent_mean_usd": {
+            agent: round(mean(a["cost_by_agent_usd"][agent] for a in attempts), 6) for agent in agents
+        },
+    }

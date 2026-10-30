@@ -7,12 +7,14 @@ agent.workspace.resolve_in_workspace, which is the sole barrier keeping these
 tools inside the workspace (see workspace.py for why).
 """
 
+import difflib
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from agent import sandbox
+from agent.scoring import _relative_file_set
 from agent.workspace import PathEscapeError, resolve_in_workspace
 
 MAX_READ_CHARS = 100_000
@@ -57,6 +59,10 @@ class FinishArgs(BaseModel):
     summary: str = Field(min_length=1)
 
 
+class GetDiffArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
 TOOL_SCHEMAS: dict[str, type[BaseModel]] = {
     "list_dir": ListDirArgs,
     "read_file": ReadFileArgs,
@@ -64,11 +70,20 @@ TOOL_SCHEMAS: dict[str, type[BaseModel]] = {
     "edit_file": EditFileArgs,
     "run_tests": RunTestsArgs,
     "finish": FinishArgs,
+    "get_diff": GetDiffArgs,
 }
 
+# The single-agent loop's tool set. get_diff is multi-agent only (Reviewer):
+# it needs a baseline snapshot of the workspace, which only that mode makes.
+SINGLE_AGENT_TOOLS = ("list_dir", "read_file", "search", "edit_file", "run_tests", "finish")
 
-def tool_definitions() -> list[dict]:
-    """Anthropic tool-use JSON schemas, one per entry in TOOL_SCHEMAS."""
+
+def tool_definitions(names: tuple[str, ...] | list[str] = SINGLE_AGENT_TOOLS) -> list[dict]:
+    """Anthropic tool-use JSON schemas for `names` (default: the single-agent set)."""
+    return [d for d in _all_tool_definitions() if d["name"] in names]
+
+
+def _all_tool_definitions() -> list[dict]:
     return [
         {
             "name": "list_dir",
@@ -168,6 +183,14 @@ def tool_definitions() -> list[dict]:
                 "additionalProperties": False,
             },
         },
+        {
+            "name": "get_diff",
+            "description": (
+                "Unified diff of every change made to the workspace so far, relative to "
+                "its state before any agent touched it."
+            ),
+            "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
     ]
 
 
@@ -265,7 +288,48 @@ def _run_finish(args: FinishArgs) -> dict:
     return {"summary": args.summary}
 
 
-def dispatch_tool(name: str, raw_args: dict[str, Any], workspace: Path) -> tuple[dict, bool]:
+def _read_lines(path: Path) -> list[str]:
+    try:
+        return path.read_text(encoding="utf-8").splitlines(keepends=True)
+    except UnicodeDecodeError:
+        return ["<binary or non-UTF-8 file>\n"]
+
+
+def _run_get_diff(workspace: Path, baseline: Path | None) -> dict:
+    """Diff workspace vs `baseline` -- the snapshot taken when the workspace
+    was materialized (base + the bug's broken files), so the diff shows only
+    agent edits, never the injected bug itself. Cache/bytecode paths are
+    skipped exactly as scoring skips them."""
+    if baseline is None or not baseline.is_dir():
+        raise ToolError("get_diff is unavailable: no baseline snapshot for this workspace")
+    before = _relative_file_set(baseline)
+    after = _relative_file_set(workspace)
+    chunks: list[str] = []
+    changed: list[str] = []
+    for rel in sorted(before | after):
+        old = _read_lines(baseline / rel) if rel in before else []
+        new = _read_lines(workspace / rel) if rel in after else []
+        if old == new:
+            continue
+        name = str(rel).replace("\\", "/")
+        changed.append(name)
+        chunks.extend(
+            difflib.unified_diff(
+                old, new,
+                fromfile=f"a/{name}" if rel in before else "/dev/null",
+                tofile=f"b/{name}" if rel in after else "/dev/null",
+            )
+        )
+    diff = "".join(chunks)
+    truncated = len(diff) > MAX_READ_CHARS
+    if truncated:
+        diff = diff[:MAX_READ_CHARS]
+    return {"changed_files": changed, "diff": diff, "truncated": truncated}
+
+
+def dispatch_tool(
+    name: str, raw_args: dict[str, Any], workspace: Path, baseline: Path | None = None
+) -> tuple[dict, bool]:
     """Validate and execute a tool call. Returns (result_dict, is_error).
 
     Callers are expected to log every call -- including rejections -- using
@@ -293,6 +357,8 @@ def dispatch_tool(name: str, raw_args: dict[str, Any], workspace: Path) -> tuple
             return _run_run_tests(workspace, args), False
         if name == "finish":
             return _run_finish(args), False
+        if name == "get_diff":
+            return _run_get_diff(workspace, baseline), False
     except (ToolError, PathEscapeError) as exc:
         return {"error": str(exc)}, True
 
