@@ -16,7 +16,7 @@ Docker sandbox (no network, 512MB, 1 cpu, timeout).
 - `sandbox/Dockerfile` — `bugzoo-sandbox` image. `scripts/verify_zoo.py` — asserts every bug fails, base passes.
 - `agent/` — config, workspace (path containment), sandbox (docker runner), tools (Pydantic schemas), loop, scoring, run (CLI).
 - `config/pricing.json` — per-model $/MTok, tiered where applicable.
-- `tests/` — unit tests, no API calls. `reports/` — trajectory logs + `baseline_<model>.json` (`tmp/` gitignored).
+- `tests/` — unit tests, no API calls. `reports/` — trajectory logs + `baseline_<model>_<run_id>.json` (`tmp/` gitignored).
 
 ## Commands
 - Build sandbox: `docker build -t bugzoo-sandbox -f sandbox/Dockerfile sandbox`

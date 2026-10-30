@@ -1,0 +1,212 @@
+[
+  {
+    "run_id": "20261029_184512",
+    "bug_id": "BUG-001",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_184512",
+    "bug_id": "BUG-002",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_184512",
+    "bug_id": "BUG-003",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_184512",
+    "bug_id": "BUG-004",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_184512",
+    "bug_id": "BUG-005",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_184512",
+    "bug_id": "BUG-006",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_184512",
+    "bug_id": "BUG-007",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_184512",
+    "bug_id": "BUG-008",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_184512",
+    "bug_id": "BUG-009",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_184512",
+    "bug_id": "BUG-010",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_184512",
+    "bug_id": "BUG-011",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_184512",
+    "bug_id": "BUG-012",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_184512",
+    "bug_id": "BUG-013",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_184512",
+    "bug_id": "BUG-014",
+    "injection_flag_before": true,
+    "injection_flag_after": false,
+    "changed": true
+  },
+  {
+    "run_id": "20261029_184512",
+    "bug_id": "BUG-015",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_185026",
+    "bug_id": "BUG-001",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_185026",
+    "bug_id": "BUG-002",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_185026",
+    "bug_id": "BUG-003",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_185026",
+    "bug_id": "BUG-004",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_185026",
+    "bug_id": "BUG-005",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_185026",
+    "bug_id": "BUG-006",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_185026",
+    "bug_id": "BUG-007",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_185026",
+    "bug_id": "BUG-008",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_185026",
+    "bug_id": "BUG-009",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_185026",
+    "bug_id": "BUG-010",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_185026",
+    "bug_id": "BUG-011",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_185026",
+    "bug_id": "BUG-012",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_185026",
+    "bug_id": "BUG-013",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  },
+  {
+    "run_id": "20261029_185026",
+    "bug_id": "BUG-014",
+    "injection_flag_before": true,
+    "injection_flag_after": false,
+    "changed": true
+  },
+  {
+    "run_id": "20261029_185026",
+    "bug_id": "BUG-015",
+    "injection_flag_before": false,
+    "injection_flag_after": false,
+    "changed": false
+  }
+]
